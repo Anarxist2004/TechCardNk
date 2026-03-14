@@ -196,12 +196,17 @@ function extractParamsFromBlocks(blocksData) {
 }
 
 export const api = {
+  getMethodologies: async () => {
+    const data = await postRequest('methodologies', {});
+    return transformMethodologiesResponse(data);
+  },
+
   /**
    * Получить типы объектов контроля (например: Пластина, Труба)
    * Эндпоинт: POST /techcard/object
    */
-  getObjectTypes: async () => {
-    const data = await postRequest('object', {});
+  getObjectTypes: async (methodology = 0) => {
+    const data = await postRequest('object', { methodology: parseInt(methodology, 10) || 0 });
     return transformTypesResponse(data);
   },
 
@@ -210,9 +215,12 @@ export const api = {
    * Эндпоинт: POST /techcard/element
    * @param {number} typeId - ID типа объекта
    */
-  getElements: async (typeId) => {
+  getElements: async (typeId, methodology = 0) => {
     console.log('API: getElements, typeId:', typeId);
-    const data = await postRequest('element', { type: parseInt(typeId) });
+    const data = await postRequest('element', {
+      type: parseInt(typeId),
+      methodology: parseInt(methodology, 10) || 0,
+    });
     console.log('API: ответ от element:', data);
     const blocksData = transformBlocksResponse(data);
     console.log('API: blocksData:', blocksData);
@@ -227,8 +235,11 @@ export const api = {
    * @param {number} typeId - ID типа элемента
    * @returns {Promise<Array<{id: string, name: string, typeData: string}>>}
    */
-  getElementParams: async (typeId) => {
-    const data = await postRequest('elementParams', { idElement: parseInt(typeId) });
+  getElementParams: async (typeId, methodology = 0) => {
+    const data = await postRequest('elementParams', {
+      idElement: parseInt(typeId),
+      methodology: parseInt(methodology, 10) || 0,
+    });
     const blocksData = transformBlocksResponse(data);
     return extractParamsFromBlocks(blocksData);
   },
@@ -239,7 +250,7 @@ export const api = {
    * @param {number|string} elementId - ID элемента (объекта контроля) из таблицы objectControl
    * @returns {Promise<{type, blocks, flatParams}>}
    */
-  getElementParamsWithValues: async (elementId) => {
+  getElementParamsWithValues: async (elementId, methodology = 0) => {
     // Преобразуем в число, если это строка
     const numericId = typeof elementId === 'string' ? parseInt(elementId, 10) : elementId;
     
@@ -250,7 +261,10 @@ export const api = {
     }
     
     console.log('API: getElementParamsWithValues, idElement:', numericId);
-    const data = await postRequest('elementParamValue', { idElement: numericId });
+    const data = await postRequest('elementParamValue', {
+      idElement: numericId,
+      methodology: parseInt(methodology, 10) || 0,
+    });
     console.log('API: ответ от elementParamValue:', data);
     return transformBlocksResponse(data);
   },
@@ -261,8 +275,11 @@ export const api = {
    * @param {number} elementId - ID элемента
    * @param {string} paramId - ID параметра
    */
-  getParamStandardValues: async (elementId, paramId) => {
-    const data = await postRequest('elementParamValue', { idElement: parseInt(elementId) });
+  getParamStandardValues: async (elementId, paramId, methodology = 0) => {
+    const data = await postRequest('elementParamValue', {
+      idElement: parseInt(elementId),
+      methodology: parseInt(methodology, 10) || 0,
+    });
     const blocksData = transformBlocksResponse(data);
 
     // Ищем параметр по ID
@@ -290,12 +307,38 @@ export const api = {
    * Получить сырые данные (без преобразования)
    */
   raw: {
-    getObjectTypes: () => postRequest('object', {}),
-    getElements: (typeId) => postRequest('element', { type: parseInt(typeId) }),
-    getElementParams: (typeId) => postRequest('elementParams', { idElement: parseInt(typeId) }),
-    getElementParamsWithValues: (elementId) => postRequest('elementParamValue', { idElement: parseInt(elementId) }),
+    getMethodologies: () => postRequest('methodologies', {}),
+    getObjectTypes: (methodology = 0) => postRequest('object', { methodology: parseInt(methodology, 10) || 0 }),
+    getElements: (typeId, methodology = 0) => postRequest('element', {
+      type: parseInt(typeId),
+      methodology: parseInt(methodology, 10) || 0,
+    }),
+    getElementParams: (typeId, methodology = 0) => postRequest('elementParams', {
+      idElement: parseInt(typeId),
+      methodology: parseInt(methodology, 10) || 0,
+    }),
+    getElementParamsWithValues: (elementId, methodology = 0) => postRequest('elementParamValue', {
+      idElement: parseInt(elementId),
+      methodology: parseInt(methodology, 10) || 0,
+    }),
     updateTechCard: (techCardData) => postRequest('updateTechCard', { techCard: techCardData }),
   }
 };
+
+function transformMethodologiesResponse(data) {
+  if (!data) return [];
+
+  if (Array.isArray(data.items)) {
+    return data.items.map((item) => ({
+      id: String(item.id),
+      name: item.name,
+    }));
+  }
+
+  return Object.entries(data).map(([id, name]) => ({
+    id: String(id),
+    name,
+  }));
+}
 
 export default api;

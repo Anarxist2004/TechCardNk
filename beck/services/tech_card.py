@@ -11,9 +11,11 @@ class TechCardData:
     def __init__(
         self,
         typeObjectControl: Optional[TypeObjectControl] = None,
+        methodology: int = 0,
         params: Optional[Dict[str, Dict[str, Any]]] = None
     ):
         self.type = typeObjectControl
+        self.methodology = methodology
         self.params = params or {}
 
     def get(self, key: str):
@@ -25,6 +27,9 @@ class TechCardData:
 
     def getTypeObjectControl(self,)->TypeObjectControl:
         return self.type
+
+    def getMethodology(self) -> int:
+        return self.methodology
     
     def to_dict(self) -> Dict:
         return {
@@ -34,6 +39,7 @@ class TechCardData:
     def _to_json_dict(self) -> Dict[str, Any]:
         type_val = self.type.value if hasattr(self.type, "value") else self.type
         return {
+            "methodology": self.methodology,
             "type": type_val,
             "params": self.params,
         }
@@ -57,11 +63,13 @@ class TechCardData:
             data = json.loads(data)  # превращаем JSON-строку в словарь
 
         type_val = data.get("type")
+        methodology = data.get("methodology", 0)
         params = data.get("params", {})
 
 
-        self.typeObjectControl=type_val
-        self.params=params
+        self.type = type_val
+        self.methodology = methodology
+        self.params = params
     
     def has_block_and_param(self,block_name: str,param_name: str) -> bool:
         for block in self.params.values():

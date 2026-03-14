@@ -517,3 +517,57 @@ class PostgreDbShablov(IRepository[TechCardData]):
         #         all_data[key] = []
         
         return all_data
+
+    def get_params_for_type(self, type_id):
+        return self.get_all_blocks()
+
+    def get_all_controlled_element_types(self) -> TechCardData:
+        tech_card = TechCardData()
+        tech_card.type = {1: "Контролируемый элемент"}
+        return tech_card
+
+    def get_all_objects_by_type_id(self, type_id) -> TechCardData:
+        tech_card = self.get_all_blocks()
+        elements = self.get_all_controlled_elements()
+        element_dict = {
+            row["id"]: row["name"]
+            for row in elements
+            if row.get("id") is not None and row.get("name")
+        }
+
+        if 1 not in tech_card.params:
+            tech_card.params[1] = {
+                "name": "Объект контроля",
+                "params": {},
+            }
+
+        tech_card.params[1]["params"] = {
+            "0": {
+                "name": "Объект контроля",
+                "val": element_dict or {1: "Техкарта Газпром"},
+            }
+        }
+        return tech_card
+
+    def get_params_for_element(self, element_id: int) -> TechCardData:
+        tech_card = self.get_all_blocks()
+        tech_card.type = "Контролируемый элемент"
+
+        if 1 not in tech_card.params:
+            tech_card.params[1] = {
+                "name": "Объект контроля",
+                "params": {},
+            }
+
+        selected_element = next(
+            (row for row in self.get_all_controlled_elements() if row.get("id") == element_id),
+            None,
+        )
+        tech_card.params[1]["params"]["0"] = {
+            "name": "Объект контроля",
+            "val": {
+                "id": element_id,
+                "name": selected_element.get("name") if selected_element else "Техкарта Газпром",
+            }
+        }
+        return tech_card

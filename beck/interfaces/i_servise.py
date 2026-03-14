@@ -13,19 +13,19 @@ class IServise(ABC):
         pass
 
     @abstractmethod
-    def getObjectControl(self)->T:
+    def getObjectControl(self, methodology=0)->T:
         pass
 
     @abstractmethod
-    def getControlElements(self,id)->T:
+    def getControlElements(self,id, methodology=0)->T:
         pass
 
     @abstractmethod
-    def getControlElementParam(self,id)->T:
+    def getControlElementParam(self,id, methodology=0)->T:
         pass
 
     @abstractmethod
-    def geElementParamsValue(self,id)->T:
+    def geElementParamsValue(self,id, methodology=0)->T:
         pass
 
     @abstractmethod
@@ -34,4 +34,8 @@ class IServise(ABC):
 
     @abstractmethod
     def updateTechCard(self,techCard)->T:
+        pass
+
+    @abstractmethod
+    def getMethodologies(self)->T:
         pass

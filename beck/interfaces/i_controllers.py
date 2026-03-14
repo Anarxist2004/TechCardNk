@@ -14,19 +14,19 @@ class IControllers(ABC, Generic[T]):
         pass
 
     @abstractmethod
-    def getObjectControl(self)->T:
+    def getObjectControl(self, methodology=0)->T:
         pass
 
     @abstractmethod
-    def getControlElements(self,id)->T:
+    def getControlElements(self,id, methodology=0)->T:
         pass
 
     @abstractmethod
-    def getControlElementParam(self,id)->T:
+    def getControlElementParam(self,id, methodology=0)->T:
         pass
 
     @abstractmethod
-    def getElementParamsValues(self,id)->T:
+    def getElementParamsValues(self,id, methodology=0)->T:
         pass
 
     @abstractmethod
@@ -35,6 +35,10 @@ class IControllers(ABC, Generic[T]):
 
     @abstractmethod
     def updateTechCard(self,techCard)->T:
+        pass
+
+    @abstractmethod
+    def getMethodologies(self)->T:
         pass
     
     # @abstractmethod

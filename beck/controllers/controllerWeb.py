@@ -9,20 +9,20 @@ class ControllerWeb(IControllers[TechCardData]):
     def setServise(self,serv:IServise):
         self.serv=serv    
     
-    def getObjectControl(self)->TechCardData:
-        return self.serv.getObjectControl()
+    def getObjectControl(self, methodology=0)->TechCardData:
+        return self.serv.getObjectControl(methodology)
     
-    def getControlElements(self,id)->TechCardData:
-        return self.serv.getControlElements(id)
+    def getControlElements(self,id, methodology=0)->TechCardData:
+        return self.serv.getControlElements(id, methodology)
     
-    def getControlElementParam(self,id)->TechCardData:
-        return self.serv.getControlElementParam(id)
+    def getControlElementParam(self,id, methodology=0)->TechCardData:
+        return self.serv.getControlElementParam(id, methodology)
     
     def getControlElementParamValue(self,idCntlEl,idParam)->TechCardData:
         return self.serv.getControlElementParamValue(idCntlEl,idParam)
 
-    def getElementParamsValues(self,idCntEl)->TechCardData:
-        return self.serv.geElementParamsValue(idCntEl)        
+    def getElementParamsValues(self,idCntEl, methodology=0)->TechCardData:
+        return self.serv.geElementParamsValue(idCntEl, methodology)        
     
     def handle_request(self, data: TechCardData) -> TechCardData:
         """Обрабатывает входные данные и возвращает результат"""
@@ -33,4 +33,5 @@ class ControllerWeb(IControllers[TechCardData]):
         data.from_jsonDeSerialise(techCard)
         return self.serv.updateTechCard(data)
 
-
+    def getMethodologies(self):
+        return self.serv.getMethodologies()

@@ -3,6 +3,9 @@ import { ChevronDown, ChevronRight, Loader2, FileCheck, CheckCircle, AlertCircle
 import api from '../services/api';
 import { buildTechCardPayload, updateTechCard } from '../data/formConfig';
 
+const ROSATOM_METHODOLOGY_ID = '0';
+const GAZPROM_METHODOLOGY_ID = '1';
+
 // Компонент поля с возможностью ввода И выбора из списка
 const ComboBoxField = ({ label, value, inputValue, options, onChange,
   onInputChange, loading, placeholder, disabled }) => {
@@ -408,6 +411,11 @@ const InputWithSuggestions = ({ label, value, onChange, standardValues, loading,
 
 // Основной компонент формы технологической карты
 const TechCardForm = () => {
+  const [methodologies, setMethodologies] = useState([]);
+  const [loadingMethodologies, setLoadingMethodologies] = useState(true);
+  const [selectedMethodology, setSelectedMethodology] = useState(null);
+  const [methodologyInputValue, setMethodologyInputValue] = useState('');
+
   // Типы объектов
   const [objectTypes, setObjectTypes] = useState([]);
   const [loadingObjects, setLoadingObjects] = useState(true);
@@ -474,6 +482,30 @@ const TechCardForm = () => {
   // Загруженные изображения { blockId: [{id, file, preview, name}, ...] }
   const [uploadedImages, setUploadedImages] = useState({});
   const [nextImageId, setNextImageId] = useState(1);
+  const [standardValuesCache, setStandardValuesCache] = useState({});
+
+  const isRosatomMethodology = selectedMethodology === ROSATOM_METHODOLOGY_ID;
+  const isGazpromMethodology = selectedMethodology === GAZPROM_METHODOLOGY_ID;
+
+  const resetLoadedTechCard = () => {
+    setSelectedElement(null);
+    setElementInputValue('');
+    setBlocks([]);
+    setParamValues({});
+    setObjectType(null);
+    setUserEditedFields({});
+    setCollapsedBlocks({});
+    setCustomFields({});
+    setUploadedImages({});
+    setStandardValuesCache({});
+  };
+
+  const resetObjectSelection = () => {
+    setSelectedObject(null);
+    setObjectInputValue('');
+    setElements([]);
+    resetLoadedTechCard();
+  };
 
   // Обработчик загрузки изображения
   const handleImageUpload = (blockId, event) => {
@@ -548,31 +580,69 @@ const TechCardForm = () => {
     return { filled, total };
   };
 
-  // Загрузка типов объектов при старте
+  // Загрузка начальных данных при старте
   useEffect(() => {
-    const loadObjectTypes = async () => {
+    const loadInitialData = async () => {
+      setLoadingMethodologies(true);
       try {
-        const types = await api.getObjectTypes();
+        const availableMethodologies = await api.getMethodologies();
+        setMethodologies(availableMethodologies);
+      } catch (error) {
+        console.error('Ошибка загрузки начальных данных:', error);
+      } finally {
+        setLoadingMethodologies(false);
+      }
+    };
+    loadInitialData();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedMethodology) {
+      setObjectTypes([]);
+      setLoadingObjects(false);
+      return;
+    }
+
+    const loadObjectTypes = async () => {
+      setLoadingObjects(true);
+      try {
+        const types = await api.getObjectTypes(selectedMethodology);
         setObjectTypes(types);
       } catch (error) {
         console.error('Ошибка загрузки типов объектов:', error);
+        setObjectTypes([]);
       } finally {
         setLoadingObjects(false);
       }
     };
+
     loadObjectTypes();
-  }, []);
+  }, [selectedMethodology]);
+
+  const handleMethodologySelect = (option) => {
+    setSelectedMethodology(option.id);
+    setMethodologyInputValue(option.name);
+    resetObjectSelection();
+  };
+
+  const handleMethodologyInputChange = (value) => {
+    setMethodologyInputValue(value);
+
+    const matchingOption = methodologies.find((option) => option.name === value);
+    const nextMethodologyId = matchingOption ? matchingOption.id : null;
+
+    if (nextMethodologyId !== selectedMethodology) {
+      resetObjectSelection();
+    }
+
+    setSelectedMethodology(nextMethodologyId);
+  };
 
   // Обработчик выбора объекта из списка
   const handleObjectSelect = (option) => {
     setSelectedObject(option.id);
     setObjectInputValue(option.name);
-    // Сбрасываем элемент и блоки при смене объекта
-    setSelectedElement(null);
-    setElementInputValue('');
-    setBlocks([]);
-    setParamValues({});
-    setObjectType(null);
+    resetLoadedTechCard();
   };
 
   // Обработчик ввода в поле объекта
@@ -581,8 +651,13 @@ const TechCardForm = () => {
     // Если ввели что-то отличное от выбранного, сбрасываем selectedObject
     const matchingOption = objectTypes.find(opt => opt.name === value);
     if (matchingOption) {
+      if (matchingOption.id !== selectedObject) {
+        resetLoadedTechCard();
+      }
       setSelectedObject(matchingOption.id);
     } else {
+      resetLoadedTechCard();
+      setElements([]);
       setSelectedObject(null);
     }
   };
@@ -606,7 +681,7 @@ const TechCardForm = () => {
 
   // Загрузка элементов при выборе типа объекта
   useEffect(() => {
-    if (!selectedObject) {
+    if (!selectedMethodology || !selectedObject) {
       setElements([]);
       return;
     }
@@ -614,7 +689,7 @@ const TechCardForm = () => {
     const loadElements = async () => {
       setLoadingElements(true);
       try {
-        const elems = await api.getElements(parseInt(selectedObject));
+        const elems = await api.getElements(parseInt(selectedObject), selectedMethodology);
         setElements(elems);
       } catch (error) {
         console.error('Ошибка загрузки элементов:', error);
@@ -624,11 +699,11 @@ const TechCardForm = () => {
       }
     };
     loadElements();
-  }, [selectedObject]);
+  }, [selectedMethodology, selectedObject]);
 
   // Загрузка блоков с параметрами при выборе ЭЛЕМЕНТА (объекта контроля)
   useEffect(() => {
-    if (!selectedElement) {
+    if (!selectedMethodology || !selectedElement) {
       setBlocks([]);
       setParamValues({});
       setObjectType(null);
@@ -639,7 +714,7 @@ const TechCardForm = () => {
       setLoadingBlocks(true);
       try {
         console.log('Загружаем параметры для элемента ID:', selectedElement, 'тип:', typeof selectedElement);
-        const data = await api.getElementParamsWithValues(selectedElement);
+        const data = await api.getElementParamsWithValues(selectedElement, selectedMethodology);
         console.log('Данные от API:', data);
         setBlocks(data.blocks || []);
         setObjectType(data.type);
@@ -691,7 +766,7 @@ const TechCardForm = () => {
       }
     };
     loadElementData();
-  }, [selectedElement]);
+  }, [selectedMethodology, selectedElement]);
 
   // Обработчик изменения значения параметра
   const handleParamChange = async (compositeKey, value) => {
@@ -708,10 +783,14 @@ const TechCardForm = () => {
       [compositeKey]: true
     }));
 
+    if (!isRosatomMethodology) {
+      return;
+    }
+
     // Отправляем обновлённые данные на бэкенд
     try {
       // Формируем payload для бэкенда
-      const techCardPayload = buildTechCardPayload(objectType, blocks, updatedValues);
+      const techCardPayload = buildTechCardPayload(objectType, selectedMethodology, blocks, updatedValues);
       
       console.log('Отправка изменения на бэкенд:', compositeKey, '=', value);
       console.log('Payload:', JSON.stringify(techCardPayload, null, 2));
@@ -785,9 +864,6 @@ const TechCardForm = () => {
       console.error('Ошибка при обновлении параметра:', error);
     }
   };
-
-  // Кэш стандартных значений для параметров (сохраняем при первой загрузке)
-  const [standardValuesCache, setStandardValuesCache] = useState({});
 
   // Сохраняем стандартные значения при загрузке блоков
   useEffect(() => {
@@ -876,7 +952,7 @@ const TechCardForm = () => {
     
     try {
       // Формируем payload для бэкенда
-      const techCardPayload = buildTechCardPayload(objectType, blocks, paramValues);
+      const techCardPayload = buildTechCardPayload(objectType, selectedMethodology, blocks, paramValues);
 
       console.log('═══════════════════════════════════════════════════');
       console.log('        ОТПРАВКА НА БЭКЕНД');
@@ -923,6 +999,7 @@ const TechCardForm = () => {
   };
 
   const isFormValid = () => {
+    const hasMethodology = Boolean(selectedMethodology);
     const hasObject = objectInputValue.trim();
     const hasElement = elementInputValue.trim();
 
@@ -940,9 +1017,10 @@ const TechCardForm = () => {
       });
     });
 
-    return hasObject && hasElement && allParamsValid;
+    return hasMethodology && hasObject && hasElement && allParamsValid;
   };
 
+  const hasSelectedMethodology = Boolean(selectedMethodology);
   const hasSelectedObject = objectInputValue.trim();
   const hasSelectedElement = selectedElement && blocks.length > 0;
 
@@ -956,9 +1034,24 @@ const TechCardForm = () => {
         {/* До выбора элемента: показываем секции выбора */}
         {!hasSelectedElement && (
           <>
-            {/* Секция 1: Выбор объекта */}
+            {/* Секция 1: Выбор методики */}
             <div className="bg-[#0C1515]/50 rounded-xl p-5">
-              <h3 className="text-[#0084FF] font-semibold mb-4">1. Объект контроля</h3>
+              <h3 className="text-[#0084FF] font-semibold mb-4">1. Методика</h3>
+              <ComboBoxField
+                label="Методика контроля"
+                value={selectedMethodology}
+                inputValue={methodologyInputValue}
+                options={methodologies}
+                onChange={handleMethodologySelect}
+                onInputChange={handleMethodologyInputChange}
+                loading={loadingMethodologies}
+                placeholder="Выберите методику"
+              />
+            </div>
+
+            {/* Секция 2: Выбор объекта */}
+            <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity ${hasSelectedMethodology ? 'opacity-100' : 'opacity-50'}`}>
+              <h3 className="text-[#0084FF] font-semibold mb-4">2. Объект контроля</h3>
               <ComboBoxField
                 label="Тип объекта"
                 value={selectedObject}
@@ -968,12 +1061,13 @@ const TechCardForm = () => {
                 onInputChange={handleObjectInputChange}
                 loading={loadingObjects}
                 placeholder="Выберите или введите тип объекта"
+                disabled={!hasSelectedMethodology}
               />
             </div>
 
-            {/* Секция 2: Выбор элемента */}
-            <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity ${hasSelectedObject ? 'opacity-100' : 'opacity-50'}`}>
-              <h3 className="text-[#FFFB78] font-semibold mb-4">2. Элемент контроля</h3>
+            {/* Секция 3: Выбор элемента */}
+            <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity ${hasSelectedMethodology && hasSelectedObject ? 'opacity-100' : 'opacity-50'}`}>
+              <h3 className="text-[#FFFB78] font-semibold mb-4">3. Элемент контроля</h3>
               <ComboBoxField
                 label="Тип элемента"
                 value={selectedElement}
@@ -983,7 +1077,7 @@ const TechCardForm = () => {
                 onInputChange={handleElementInputChange}
                 loading={loadingElements}
                 placeholder={selectedObject ? "Выберите или введите элемент" : "Введите элемент контроля"}
-                disabled={!hasSelectedObject}
+                disabled={!hasSelectedMethodology || !hasSelectedObject}
               />
             </div>
 
@@ -992,17 +1086,23 @@ const TechCardForm = () => {
               <div className="bg-[#0C1515]/50 rounded-xl p-5">
                 <div className="flex items-center justify-center py-8">
                   <Loader2 size={32} className="animate-spin text-[#0084FF]" />
-                  <span className="ml-3 text-[#646C89]">Загрузка параметров...</span>
+                  <span className="ml-3 text-[#646C89]">{isGazpromMethodology ? 'Загрузка техкарты...' : 'Загрузка параметров...'}</span>
                 </div>
               </div>
             )}
 
             {/* Подсказка */}
             {!loadingBlocks && !selectedElement && (
-              <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity ${hasSelectedObject ? 'opacity-100' : 'opacity-50'}`}>
-                <h3 className="text-[#0084FF] font-semibold mb-4">3. Параметры</h3>
+              <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity ${hasSelectedMethodology && hasSelectedObject ? 'opacity-100' : 'opacity-50'}`}>
+                <h3 className="text-[#0084FF] font-semibold mb-4">4. Параметры</h3>
                 <p className="text-[#646C89] text-center py-4">
-                  {hasSelectedObject ? 'Выберите элемент контроля для загрузки параметров' : 'Сначала выберите тип объекта'}
+                  {!hasSelectedMethodology
+                    ? 'Сначала выберите методику'
+                    : hasSelectedObject
+                      ? isGazpromMethodology
+                        ? 'Выберите элемент контроля, чтобы сразу загрузить полную техкарту'
+                        : 'Выберите элемент контроля для загрузки параметров'
+                      : 'Сначала выберите тип объекта'}
                 </p>
               </div>
             )}
@@ -1015,21 +1115,24 @@ const TechCardForm = () => {
             {/* Кнопка для возврата к выбору */}
             <div className="flex items-center justify-between mb-2">
               <div className="text-sm text-[#646C89]">
-                Выбрано: <span className="text-white">{objectInputValue}</span> → <span className="text-white">{elementInputValue}</span>
+                Выбрано: <span className="text-white">{methodologyInputValue}</span> → <span className="text-white">{objectInputValue}</span> → <span className="text-white">{elementInputValue}</span>
               </div>
               <button
                 type="button"
                 onClick={() => {
-                  setSelectedElement(null);
-                  setElementInputValue('');
-                  setBlocks([]);
-                  setParamValues({});
+                  resetLoadedTechCard();
                 }}
                 className="text-[#0084FF] hover:text-[#0084FF]/80 text-sm transition-colors"
               >
                 ← Изменить выбор
               </button>
             </div>
+
+            {isGazpromMethodology && (
+              <div className="bg-[#0C1515]/50 border border-[#FFFB78]/20 rounded-xl p-4 text-sm text-[#646C89]">
+                Методика «Газпром»: после выбора элемента техкарта загружается целиком, промежуточные пересчёты при каждом изменении поля не выполняются.
+              </div>
+            )}
 
             {/* Все динамические блоки от бэкенда */}
             {blocks.map((block, blockIndex) => {

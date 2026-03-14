@@ -68,9 +68,9 @@ export const fetchFormConfig = async () => {
  * Получение элементов (объектов контроля) по ID типа объекта
  * Загружает данные с backend
  */
-export const getElements = async (objectTypeId) => {
+export const getElements = async (objectTypeId, methodology = 0) => {
   try {
-    const elements = await api.getElements(parseInt(objectTypeId));
+    const elements = await api.getElements(parseInt(objectTypeId), methodology);
     if (elements && elements.length > 0) {
       return elements.map(el => ({
         ...el,
@@ -91,9 +91,9 @@ export const getElements = async (objectTypeId) => {
  * @param {number} elementId - ID элемента (объекта контроля)
  * @returns {Promise<{type, blocks, flatParams}>}
  */
-export const getElementData = async (elementId) => {
+export const getElementData = async (elementId, methodology = 0) => {
   try {
-    const data = await api.getElementParamsWithValues(parseInt(elementId));
+    const data = await api.getElementParamsWithValues(parseInt(elementId), methodology);
     // Кэшируем блоки
     cachedBlocks[elementId] = data;
     return data;
@@ -107,9 +107,9 @@ export const getElementData = async (elementId) => {
  * Получение полей размеров (параметров) по ID типа объекта
  * Загружает данные с backend (для совместимости)
  */
-export const getDimensionFields = async (objectTypeId) => {
+export const getDimensionFields = async (objectTypeId, methodology = 0) => {
   try {
-    const params = await api.getElementParams(parseInt(objectTypeId));
+    const params = await api.getElementParams(parseInt(objectTypeId), methodology);
     if (params && params.length > 0) {
       return params.map(param => ({
         id: param.id,
@@ -168,7 +168,7 @@ export const updateTechCard = async (techCardData) => {
  * @param {Array} blocks - массив блоков с параметрами
  * @param {object} paramValues - значения параметров { compositeKey: value } где compositeKey = blockId.paramId
  */
-export const buildTechCardPayload = (type, blocks, paramValues) => {
+export const buildTechCardPayload = (type, methodology, blocks, paramValues) => {
   const params = {};
 
   blocks.forEach(block => {
@@ -190,6 +190,7 @@ export const buildTechCardPayload = (type, blocks, paramValues) => {
   });
 
   return {
+    methodology: parseInt(methodology, 10) || 0,
     type: type,
     params: params
   };
