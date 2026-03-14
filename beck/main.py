@@ -29,6 +29,8 @@ from services.Changers.PreparationControl.ch_PreparationControl import Preparati
 from services.Changers.ControlProcedure.ch_ControlProcedure import ControlProcedure
 
 from services.Changers.RegulatoryMethodologicalDocumentation.sh_Stub import Stub
+from services.Changers.Gazprom.ch_ExpandJsonPayloads import ExpandJsonPayloads
+from services.Changers.Gazprom.ch_RemoveEmptyParams import RemoveEmptyParams
 
 
 def fillRosatomPipeLine(pipeLine: PipeLine) -> None:
@@ -50,7 +52,8 @@ def fillRosatomPipeLine(pipeLine: PipeLine) -> None:
 
 def fillGazpromPipeLine(pipeLine: PipeLine) -> None:
     methodology_id = TechCardService.GAZPROM_METHODOLOGY
-    pipeLine.addChanger(Stub(), methodology_id)
+    pipeLine.addChanger(ExpandJsonPayloads(), methodology_id)
+    pipeLine.addChanger(RemoveEmptyParams(), methodology_id)
 
 
 def createPipeLine() -> PipeLine:
