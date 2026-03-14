@@ -2,6 +2,7 @@ from interfaces.i_repository import IRepository
 from services.tech_card import TechCardData
 from services.tech_card import TypeObjectControl
 from typing import List, Optional
+import json
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -548,6 +549,301 @@ class PostgreDbShablov(IRepository[TechCardData]):
             }
         }
         return tech_card
+
+    def _build_full_gazprom_tech_card(self, element_id: int) -> TechCardData:
+        element_row = self._fetch_one_row(
+            """
+            SELECT
+                ce.id,
+                ce.name AS controlled_element_name,
+                dn.id AS drawing_number_id,
+                dn.name AS drawing_number_name,
+                m.name AS manufacturer_name,
+                m.address AS manufacturer_address
+            FROM controlled_elements ce
+            LEFT JOIN drawing_numbers dn ON dn.id = ce.drawing_number_id
+            LEFT JOIN manufacturers m ON m.id = dn.manufacturer_id
+            WHERE ce.id = %s
+            """,
+            (element_id,),
+        )
+
+        if not element_row:
+            return TechCardData()
+
+        drawing_number_id = element_row.get("drawing_number_id")
+        blocks: Dict[int, Dict[str, Any]] = {}
+
+        object_block = self._append_block(blocks, "Объект контроля")
+        self._add_param(object_block, "Контролируемый элемент", element_row.get("controlled_element_name"))
+        self._add_param(object_block, "Номер чертежа", element_row.get("drawing_number_name"))
+        self._add_param(object_block, "Изготовитель", element_row.get("manufacturer_name"))
+        self._add_param(object_block, "Адрес изготовителя", element_row.get("manufacturer_address"))
+
+        detail_drawings = self._fetch_all_rows(
+            """
+            SELECT id, name
+            FROM detail_drawings
+            WHERE drawing_number_id = %s
+            ORDER BY id
+            """,
+            (drawing_number_id,),
+        ) if drawing_number_id else []
+        self._add_param(object_block, "Детальные чертежи", self._join_values(detail_drawings))
+
+        designations = self._fetch_all_rows(
+            """
+            SELECT
+                d.id,
+                d.name,
+                u.name AS user_name,
+                u.username
+            FROM designations d
+            LEFT JOIN users u ON u.id = d.user_id
+            WHERE d.drawing_number_id = %s
+            ORDER BY d.id
+            """,
+            (drawing_number_id,),
+        ) if drawing_number_id else []
+        self._add_param(object_block, "Обозначения", self._join_values(designations))
+
+        for designation in designations:
+            designation_id = designation["id"]
+            designation_name = designation.get("name") or f'Обозначение {designation_id}'
+
+            designation_block = self._append_block(blocks, f"Параметры обозначения: {designation_name}")
+            self._add_param(designation_block, "Обозначение", designation_name)
+            self._add_param(designation_block, "Пользователь", designation.get("user_name"))
+            self._add_param(designation_block, "Логин пользователя", designation.get("username"))
+
+            designation_params_rows = self._fetch_all_rows(
+                """
+                SELECT
+                    dp.id,
+                    wjt.name AS welded_joint_type_name,
+                    wm.name AS welding_method_name,
+                    mt.name AS metal_name,
+                    wmat.name AS welding_material_name,
+                    wjc.name AS welded_joint_category_name,
+                    soc.name AS scope_of_control_name,
+                    rs.name AS radiation_source_name,
+                    rs.focal_spot_diameter,
+                    sst.name AS sensitivity_standard_type_name,
+                    mst.name AS marking_sign_type_name,
+                    nsc.name AS non_standard_cassette_name,
+                    mgt.name AS magnifier_type_name,
+                    dtt.name AS densitometer_type_name,
+                    ngt.name AS negatoscope_type_name,
+                    rlt.name AS ruler_type_name,
+                    ptt.name AS protractor_type_name,
+                    pdt.name AS paint_detector_type_name
+                FROM designation_params dp
+                LEFT JOIN welded_joint_types wjt ON wjt.id = dp.welded_joint_type_id
+                LEFT JOIN welding_methods wm ON wm.id = dp.welding_method_id
+                LEFT JOIN metals mt ON mt.id = dp.metal_id
+                LEFT JOIN welding_materials wmat ON wmat.id = dp.welding_material_id
+                LEFT JOIN welded_joint_categories wjc ON wjc.id = dp.welded_joint_category_id
+                LEFT JOIN scope_of_controls soc ON soc.id = dp.scope_of_control_id
+                LEFT JOIN radiation_sources rs ON rs.id = dp.radiation_source_id
+                LEFT JOIN sensitivity_standard_types sst ON sst.id = dp.sensitivity_standard_type_id
+                LEFT JOIN marking_sign_types mst ON mst.id = dp.marking_sign_type_id
+                LEFT JOIN non_standard_cassettes nsc ON nsc.id = dp.non_standard_cassette_id
+                LEFT JOIN magnifier_types mgt ON mgt.id = dp.magnifier_type_id
+                LEFT JOIN densitometer_types dtt ON dtt.id = dp.densitometer_type_id
+                LEFT JOIN negatoscope_types ngt ON ngt.id = dp.negatoscope_type_id
+                LEFT JOIN ruler_types rlt ON rlt.id = dp.ruler_type_id
+                LEFT JOIN protractor_types ptt ON ptt.id = dp.protractor_type_id
+                LEFT JOIN paint_detector_types pdt ON pdt.id = dp.paint_detector_type_id
+                WHERE dp.designation_id = %s
+                ORDER BY dp.id
+                """,
+                (designation_id,),
+            )
+            for row in designation_params_rows:
+                self._add_param(designation_block, "Тип сварного соединения", row.get("welded_joint_type_name"))
+                self._add_param(designation_block, "Метод сварки", row.get("welding_method_name"))
+                self._add_param(designation_block, "Металл", row.get("metal_name"))
+                self._add_param(designation_block, "Сварочный материал", row.get("welding_material_name"))
+                self._add_param(designation_block, "Категория сварного соединения", row.get("welded_joint_category_name"))
+                self._add_param(designation_block, "Объем контроля", row.get("scope_of_control_name"))
+                self._add_param(designation_block, "Источник излучения", row.get("radiation_source_name"))
+                self._add_param(designation_block, "Размер фокусного пятна", row.get("focal_spot_diameter"))
+                self._add_param(designation_block, "Тип эталона чувствительности", row.get("sensitivity_standard_type_name"))
+                self._add_param(designation_block, "Тип знака маркировки", row.get("marking_sign_type_name"))
+                self._add_param(designation_block, "Нестандартная кассета", row.get("non_standard_cassette_name"))
+                self._add_param(designation_block, "Тип лупы", row.get("magnifier_type_name"))
+                self._add_param(designation_block, "Тип денситометра", row.get("densitometer_type_name"))
+                self._add_param(designation_block, "Тип негатоскопа", row.get("negatoscope_type_name"))
+                self._add_param(designation_block, "Тип линейки", row.get("ruler_type_name"))
+                self._add_param(designation_block, "Тип угломера", row.get("protractor_type_name"))
+                self._add_param(designation_block, "Тип дефектоскопической краски", row.get("paint_detector_type_name"))
+
+            dimensions_block = self._append_block(blocks, f"Размеры: {designation_name}")
+            dimensions_rows = self._fetch_all_rows(
+                """
+                SELECT id, text, value
+                FROM dimensions
+                WHERE designation_id = %s
+                ORDER BY id
+                """,
+                (designation_id,),
+            )
+            for row in dimensions_rows:
+                self._add_param(dimensions_block, row.get("text") or f'Размер {row["id"]}', row.get("value"))
+
+            preparation_block = self._append_block(blocks, f"Подготовка элемента: {designation_name}")
+            preparation_rows = self._fetch_all_rows(
+                """
+                SELECT
+                    ep.id,
+                    sqr.name AS surface_quality_requirement_name,
+                    ms.name AS marking_section_name
+                FROM element_preparation ep
+                LEFT JOIN surface_quality_requirements sqr ON sqr.id = ep.surface_quality_requirement_id
+                LEFT JOIN marking_sections ms ON ms.id = ep.marking_section_id
+                WHERE ep.designation_id = %s
+                ORDER BY ep.id
+                """,
+                (designation_id,),
+            )
+            for index, row in enumerate(preparation_rows, start=1):
+                suffix = f" #{index}" if len(preparation_rows) > 1 else ""
+                self._add_param(preparation_block, f"Требование к качеству поверхности{suffix}", row.get("surface_quality_requirement_name"))
+                self._add_param(preparation_block, f"Участок маркировки{suffix}", row.get("marking_section_name"))
+
+            control_terms_block = self._append_block(blocks, f"Условия контроля: {designation_name}")
+            control_terms_rows = self._fetch_all_rows(
+                """
+                SELECT
+                    ct.id,
+                    cp.name AS control_place_name,
+                    wlc.name AS working_link_composition_name,
+                    tr.name AS temperature_range_name,
+                    ppa.name AS photo_processing_automatic_name,
+                    dt.name AS development_time_name
+                FROM control_terms ct
+                LEFT JOIN control_places cp ON cp.id = ct.control_place_id
+                LEFT JOIN working_link_compositions wlc ON wlc.id = ct.working_link_composition_id
+                LEFT JOIN temperature_ranges tr ON tr.id = ct.temperature_range_id
+                LEFT JOIN photo_processing_automatic ppa ON ppa.id = ct.photo_processing_automatic_id
+                LEFT JOIN development_times dt ON dt.id = ct.development_time_id
+                WHERE ct.designation_id = %s
+                ORDER BY ct.id
+                """,
+                (designation_id,),
+            )
+            for index, row in enumerate(control_terms_rows, start=1):
+                suffix = f" #{index}" if len(control_terms_rows) > 1 else ""
+                self._add_param(control_terms_block, f"Место контроля{suffix}", row.get("control_place_name"))
+                self._add_param(control_terms_block, f"Состав рабочего звена{suffix}", row.get("working_link_composition_name"))
+                self._add_param(control_terms_block, f"Температурный диапазон{suffix}", row.get("temperature_range_name"))
+                self._add_param(control_terms_block, f"Автоматическая фотообработка{suffix}", row.get("photo_processing_automatic_name"))
+                self._add_param(control_terms_block, f"Время проявления{suffix}", row.get("development_time_name"))
+
+            film_block = self._append_block(blocks, f"Пленка: {designation_name}")
+            film_loading_rows = self._fetch_all_rows(
+                """
+                SELECT
+                    flu.id,
+                    flt.name AS film_loading_type_name
+                FROM film_loading_usage flu
+                LEFT JOIN film_loading_types flt ON flt.id = flu.film_loading_type_id
+                WHERE flu.designation_id = %s
+                ORDER BY flu.id
+                """,
+                (designation_id,),
+            )
+            for index, row in enumerate(film_loading_rows, start=1):
+                suffix = f" #{index}" if len(film_loading_rows) > 1 else ""
+                self._add_param(film_block, f"Тип загрузки пленки{suffix}", row.get("film_loading_type_name"))
+
+            film_usage_rows = self._fetch_all_rows(
+                """
+                SELECT
+                    fu.id,
+                    rft.name AS radiographic_film_type_name
+                FROM film_usage fu
+                LEFT JOIN radiographic_film_types rft ON rft.id = fu.radiographic_film_type_id
+                WHERE fu.designation_id = %s
+                ORDER BY fu.id
+                """,
+                (designation_id,),
+            )
+            for index, row in enumerate(film_usage_rows, start=1):
+                suffix = f" #{index}" if len(film_usage_rows) > 1 else ""
+                self._add_param(film_block, f"Тип радиографической пленки{suffix}", row.get("radiographic_film_type_name"))
+
+            decoding_block = self._append_block(blocks, f"Расшифровка радиографии: {designation_name}")
+            decoding_rows = self._fetch_all_rows(
+                """
+                SELECT id, parameters
+                FROM radiographic_decoding_types
+                WHERE designation_id = %s
+                ORDER BY id
+                """,
+                (designation_id,),
+            )
+            for index, row in enumerate(decoding_rows, start=1):
+                self._add_param(decoding_block, f"Параметры расшифровки #{index}", row.get("parameters"))
+
+            quality_block = self._append_block(blocks, f"Оценка качества: {designation_name}")
+            quality_rows = self._fetch_all_rows(
+                """
+                SELECT id, parameters
+                FROM quality_assessment_types
+                WHERE designation_id = %s
+                ORDER BY id
+                """,
+                (designation_id,),
+            )
+            for index, row in enumerate(quality_rows, start=1):
+                self._add_param(quality_block, f"Параметры оценки #{index}", row.get("parameters"))
+
+            operations_block = self._append_block(blocks, f"Технологические операции: {designation_name}")
+            operation_rows = self._fetch_all_rows(
+                """
+                SELECT
+                    tos.id,
+                    tos.control_term_id,
+                    tos.operation_index,
+                    tos.operation_name
+                FROM tech_operation_sequences tos
+                INNER JOIN control_terms ct ON ct.id = tos.control_term_id
+                WHERE ct.designation_id = %s
+                ORDER BY ct.id, tos.operation_index, tos.id
+                """,
+                (designation_id,),
+            )
+            for row in operation_rows:
+                operation_index = row.get("operation_index") or row.get("id")
+                self._add_param(operations_block, f"Операция {operation_index}", row.get("operation_name"))
+
+        permissible_block = self._append_block(blocks, "Допустимые включения")
+        permissible_rows = self._fetch_all_rows(
+            """
+            SELECT
+                pis.id,
+                dd.name AS detail_drawing_name,
+                pis.standard_code,
+                pis.parameters
+            FROM permissible_inclusion_standards pis
+            LEFT JOIN detail_drawings dd ON dd.id = pis.detail_drawing_id
+            WHERE dd.drawing_number_id = %s
+            ORDER BY pis.id
+            """,
+            (drawing_number_id,),
+        ) if drawing_number_id else []
+        for index, row in enumerate(permissible_rows, start=1):
+            drawing_name = row.get("detail_drawing_name") or f"Чертеж {index}"
+            self._add_param(permissible_block, f"{drawing_name}: код стандарта", row.get("standard_code"))
+            self._add_param(permissible_block, f"{drawing_name}: параметры", row.get("parameters"))
+
+        tech_card = TechCardData(typeObjectControl="Контролируемый элемент")
+        tech_card.params = blocks
+        return tech_card
+
+    def get_params_for_element(self, element_id: int) -> TechCardData:
+        return self._build_full_gazprom_tech_card(element_id)
 
     def get_params_for_element(self, element_id: int) -> TechCardData:
         element_row = self._fetch_one_row(

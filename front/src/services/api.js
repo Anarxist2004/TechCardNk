@@ -111,6 +111,8 @@ function transformBlocksResponse(data) {
           id: paramId,
           name: param.name || `Параметр ${paramId}`,
           value: param.val,
+          options: Array.isArray(param.options) ? param.options : [],
+          typeData: param.typeData || 'string',
           image: param.image || null,
           blockId: blockId,
           blockName: block.name
@@ -166,11 +168,16 @@ function extractParamsFromBlocks(blocksData) {
   blocksData.blocks.forEach(block => {
     block.params.forEach(param => {
       // Определяем typeData по значению
-      let typeData = 'string';
+      let typeData = param.typeData || 'string';
       if (typeof param.value === 'number') {
         typeData = Number.isInteger(param.value) ? 'int' : 'double';
       } else if (typeof param.value === 'boolean') {
         typeData = 'bool';
+      } else if (Array.isArray(param.options) && param.options.length > 0) {
+        const firstVal = param.options[0];
+        if (typeof firstVal === 'number') {
+          typeData = Number.isInteger(firstVal) ? 'int' : 'double';
+        }
       } else if (Array.isArray(param.value)) {
         // Массив значений - определяем тип по первому элементу
         if (param.value.length > 0) {
@@ -186,6 +193,7 @@ function extractParamsFromBlocks(blocksData) {
         name: param.name,
         typeData: typeData,
         value: param.value,
+        options: param.options || [],
         blockId: param.blockId,
         blockName: param.blockName
       });
@@ -199,6 +207,14 @@ export const api = {
   getMethodologies: async () => {
     const data = await postRequest('methodologies', {});
     return transformMethodologiesResponse(data);
+  },
+
+  getFullTechCard: async (methodology = 0) => {
+    const data = await postRequest('elementParamValue', {
+      idElement: 0,
+      methodology: parseInt(methodology, 10) || 0,
+    });
+    return transformBlocksResponse(data);
   },
 
   /**
@@ -319,6 +335,10 @@ export const api = {
     }),
     getElementParamsWithValues: (elementId, methodology = 0) => postRequest('elementParamValue', {
       idElement: parseInt(elementId),
+      methodology: parseInt(methodology, 10) || 0,
+    }),
+    getFullTechCard: (methodology = 0) => postRequest('elementParamValue', {
+      idElement: 0,
       methodology: parseInt(methodology, 10) || 0,
     }),
     updateTechCard: (techCardData) => postRequest('updateTechCard', { techCard: techCardData }),

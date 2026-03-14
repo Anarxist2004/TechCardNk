@@ -507,6 +507,52 @@ const TechCardForm = () => {
     resetLoadedTechCard();
   };
 
+  const resetMethodologySelection = () => {
+    setSelectedMethodology(null);
+    setMethodologyInputValue('');
+    setObjectTypes([]);
+    setLoadingObjects(false);
+    resetObjectSelection();
+  };
+
+  const applyLoadedTechCard = (data) => {
+    setBlocks(data.blocks || []);
+    setObjectType(data.type || null);
+
+    const initialValues = {};
+    (data.blocks || []).forEach(block => {
+      block.params.forEach(param => {
+        const compositeKey = `${block.id}.${param.id}`;
+        const val = param.value;
+
+        if (val === null || val === undefined) {
+          initialValues[compositeKey] = '';
+          return;
+        }
+
+        if (Array.isArray(val)) {
+          initialValues[compositeKey] = '';
+          return;
+        }
+
+        if (typeof val === 'object' && val !== null) {
+          if (val.name !== undefined) {
+            initialValues[compositeKey] = String(val.name);
+          } else if (val.id !== undefined) {
+            initialValues[compositeKey] = String(val.id);
+          } else {
+            initialValues[compositeKey] = '';
+          }
+          return;
+        }
+
+        initialValues[compositeKey] = String(val);
+      });
+    });
+
+    setParamValues(initialValues);
+  };
+
   // Обработчик загрузки изображения
   const handleImageUpload = (blockId, event) => {
     const files = Array.from(event.target.files);
@@ -600,6 +646,31 @@ const TechCardForm = () => {
     if (!selectedMethodology) {
       setObjectTypes([]);
       setLoadingObjects(false);
+      setLoadingBlocks(false);
+      return;
+    }
+
+    if (selectedMethodology === GAZPROM_METHODOLOGY_ID) {
+      setObjectTypes([]);
+      setElements([]);
+      setLoadingObjects(false);
+
+      const loadFullTechCard = async () => {
+        setLoadingBlocks(true);
+        try {
+          const data = await api.getFullTechCard(selectedMethodology);
+          applyLoadedTechCard(data);
+        } catch (error) {
+          console.error('Ошибка загрузки полной техкарты Газпром:', error);
+          setBlocks([]);
+          setParamValues({});
+          setObjectType(null);
+        } finally {
+          setLoadingBlocks(false);
+        }
+      };
+
+      loadFullTechCard();
       return;
     }
 
@@ -703,6 +774,10 @@ const TechCardForm = () => {
 
   // Загрузка блоков с параметрами при выборе ЭЛЕМЕНТА (объекта контроля)
   useEffect(() => {
+    if (isGazpromMethodology) {
+      return;
+    }
+
     if (!selectedMethodology || !selectedElement) {
       setBlocks([]);
       setParamValues({});
@@ -716,47 +791,7 @@ const TechCardForm = () => {
         console.log('Загружаем параметры для элемента ID:', selectedElement, 'тип:', typeof selectedElement);
         const data = await api.getElementParamsWithValues(selectedElement, selectedMethodology);
         console.log('Данные от API:', data);
-        setBlocks(data.blocks || []);
-        setObjectType(data.type);
-
-        // Инициализируем значения параметров из загруженных данных
-        // Используем составной ключ blockId.paramId для уникальности
-        const initialValues = {};
-        (data.blocks || []).forEach(block => {
-          block.params.forEach(param => {
-            const compositeKey = `${block.id}.${param.id}`;
-            const val = param.value;
-            
-            // Пустое или null значение
-            if (val === null || val === undefined) {
-              initialValues[compositeKey] = '';
-              return;
-            }
-            
-            // Массив стандартных значений - оставляем пустым (выбор будет из подсказок)
-            if (Array.isArray(val)) {
-              initialValues[compositeKey] = '';
-              return;
-            }
-            
-            // Объект с id и name (например для объекта контроля)
-            if (typeof val === 'object' && val !== null) {
-              if (val.name !== undefined) {
-                initialValues[compositeKey] = String(val.name);
-              } else if (val.id !== undefined) {
-                initialValues[compositeKey] = String(val.id);
-              } else {
-                // Это словарь { "1": "значение1", ... } - оставляем пустым для выбора
-                initialValues[compositeKey] = '';
-              }
-              return;
-            }
-            
-            // Простое значение (строка, число)
-            initialValues[compositeKey] = String(val);
-          });
-        });
-        setParamValues(initialValues);
+        applyLoadedTechCard(data);
       } catch (error) {
         console.error('Ошибка загрузки данных элемента:', error);
         setBlocks([]);
@@ -767,6 +802,19 @@ const TechCardForm = () => {
     };
     loadElementData();
   }, [selectedMethodology, selectedElement]);
+
+  const normalizeOptionValues = (options) => {
+    if (!Array.isArray(options)) {
+      return [];
+    }
+
+    return options.map((option) => {
+      if (typeof option === 'object' && option !== null && option.name !== undefined) {
+        return String(option.name);
+      }
+      return String(option);
+    });
+  };
 
   // Обработчик изменения значения параметра
   const handleParamChange = async (compositeKey, value) => {
@@ -809,16 +857,14 @@ const TechCardForm = () => {
         result.blocks.forEach(block => {
           block.params.forEach(param => {
             const key = `${block.id}.${param.id}`;
+            const optionValues = normalizeOptionValues(param.options);
             const val = param.value;
             
             // Обновляем кэш если пришли новые стандартные значения
-            if (Array.isArray(val) && val.length > 0) {
-              newCache[key] = val.map(v => {
-                if (typeof v === 'object' && v !== null && v.name !== undefined) {
-                  return String(v.name);
-                }
-                return String(v);
-              });
+            if (optionValues.length > 0) {
+              newCache[key] = optionValues;
+            } else if (Array.isArray(val) && val.length > 0) {
+              newCache[key] = normalizeOptionValues(val);
             } else if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
               // Проверяем, не является ли это объектом с id/name (выбранное значение)
               if (!(val.id !== undefined && val.name !== undefined)) {
@@ -872,16 +918,14 @@ const TechCardForm = () => {
       blocks.forEach(block => {
         block.params.forEach(param => {
           const compositeKey = `${block.id}.${param.id}`;
+          const optionValues = normalizeOptionValues(param.options);
           const val = param.value;
           
           // Сохраняем только если это массив или словарь (стандартные значения)
-          if (Array.isArray(val) && val.length > 0) {
-            cache[compositeKey] = val.map(v => {
-              if (typeof v === 'object' && v !== null && v.name !== undefined) {
-                return String(v.name);
-              }
-              return String(v);
-            });
+          if (optionValues.length > 0) {
+            cache[compositeKey] = optionValues;
+          } else if (Array.isArray(val) && val.length > 0) {
+            cache[compositeKey] = normalizeOptionValues(val);
           } else if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
             // Проверяем, не является ли это объектом с id/name (выбранное значение)
             if (!(val.id !== undefined && val.name !== undefined)) {
@@ -902,6 +946,11 @@ const TechCardForm = () => {
     // Сначала проверяем кэш
     if (standardValuesCache[compositeKey] && standardValuesCache[compositeKey].length > 0) {
       return standardValuesCache[compositeKey];
+    }
+
+    const optionValues = normalizeOptionValues(param.options);
+    if (optionValues.length > 0) {
+      return optionValues;
     }
     
     const val = param.value;
@@ -933,6 +982,18 @@ const TechCardForm = () => {
 
   // Определяем тип данных параметра по значению
   const getParamTypeData = (param) => {
+    if (param.typeData) {
+      return param.typeData;
+    }
+
+    if (Array.isArray(param.options) && param.options.length > 0) {
+      const firstOption = param.options[0];
+      if (typeof firstOption === 'number') {
+        return Number.isInteger(firstOption) ? 'int' : 'double';
+      }
+      if (typeof firstOption === 'boolean') return 'bool';
+    }
+
     if (Array.isArray(param.value) && param.value.length > 0) {
       const firstVal = param.value[0];
       if (typeof firstVal === 'number') {
@@ -1000,8 +1061,8 @@ const TechCardForm = () => {
 
   const isFormValid = () => {
     const hasMethodology = Boolean(selectedMethodology);
-    const hasObject = objectInputValue.trim();
-    const hasElement = elementInputValue.trim();
+    const hasObject = isGazpromMethodology ? true : objectInputValue.trim();
+    const hasElement = isGazpromMethodology ? blocks.length > 0 : elementInputValue.trim();
 
     // Проверяем валидацию всех полей в блоках
     let allParamsValid = true;
@@ -1021,8 +1082,8 @@ const TechCardForm = () => {
   };
 
   const hasSelectedMethodology = Boolean(selectedMethodology);
-  const hasSelectedObject = objectInputValue.trim();
-  const hasSelectedElement = selectedElement && blocks.length > 0;
+  const hasSelectedObject = isGazpromMethodology ? true : objectInputValue.trim();
+  const hasSelectedElement = isGazpromMethodology ? blocks.length > 0 : selectedElement && blocks.length > 0;
 
   return (
     <div className="bg-[#21262F] rounded-2xl p-6 md:p-8">
@@ -1049,37 +1110,41 @@ const TechCardForm = () => {
               />
             </div>
 
-            {/* Секция 2: Выбор объекта */}
-            <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity ${hasSelectedMethodology ? 'opacity-100' : 'opacity-50'}`}>
-              <h3 className="text-[#0084FF] font-semibold mb-4">2. Объект контроля</h3>
-              <ComboBoxField
-                label="Тип объекта"
-                value={selectedObject}
-                inputValue={objectInputValue}
-                options={objectTypes}
-                onChange={handleObjectSelect}
-                onInputChange={handleObjectInputChange}
-                loading={loadingObjects}
-                placeholder="Выберите или введите тип объекта"
-                disabled={!hasSelectedMethodology}
-              />
-            </div>
+            {!isGazpromMethodology && (
+              <>
+                {/* Секция 2: Выбор объекта */}
+                <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity ${hasSelectedMethodology ? 'opacity-100' : 'opacity-50'}`}>
+                  <h3 className="text-[#0084FF] font-semibold mb-4">2. Объект контроля</h3>
+                  <ComboBoxField
+                    label="Тип объекта"
+                    value={selectedObject}
+                    inputValue={objectInputValue}
+                    options={objectTypes}
+                    onChange={handleObjectSelect}
+                    onInputChange={handleObjectInputChange}
+                    loading={loadingObjects}
+                    placeholder="Выберите или введите тип объекта"
+                    disabled={!hasSelectedMethodology}
+                  />
+                </div>
 
-            {/* Секция 3: Выбор элемента */}
-            <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity ${hasSelectedMethodology && hasSelectedObject ? 'opacity-100' : 'opacity-50'}`}>
-              <h3 className="text-[#FFFB78] font-semibold mb-4">3. Элемент контроля</h3>
-              <ComboBoxField
-                label="Тип элемента"
-                value={selectedElement}
-                inputValue={elementInputValue}
-                options={elements}
-                onChange={handleElementSelect}
-                onInputChange={handleElementInputChange}
-                loading={loadingElements}
-                placeholder={selectedObject ? "Выберите или введите элемент" : "Введите элемент контроля"}
-                disabled={!hasSelectedMethodology || !hasSelectedObject}
-              />
-            </div>
+                {/* Секция 3: Выбор элемента */}
+                <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity ${hasSelectedMethodology && hasSelectedObject ? 'opacity-100' : 'opacity-50'}`}>
+                  <h3 className="text-[#FFFB78] font-semibold mb-4">3. Элемент контроля</h3>
+                  <ComboBoxField
+                    label="Тип элемента"
+                    value={selectedElement}
+                    inputValue={elementInputValue}
+                    options={elements}
+                    onChange={handleElementSelect}
+                    onInputChange={handleElementInputChange}
+                    loading={loadingElements}
+                    placeholder={selectedObject ? "Выберите или введите элемент" : "Введите элемент контроля"}
+                    disabled={!hasSelectedMethodology || !hasSelectedObject}
+                  />
+                </div>
+              </>
+            )}
 
             {/* Индикатор загрузки */}
             {loadingBlocks && (
@@ -1092,13 +1157,15 @@ const TechCardForm = () => {
             )}
 
             {/* Подсказка */}
-            {!loadingBlocks && !selectedElement && (
+            {!loadingBlocks && !hasSelectedElement && (
               <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity ${hasSelectedMethodology && hasSelectedObject ? 'opacity-100' : 'opacity-50'}`}>
                 <h3 className="text-[#0084FF] font-semibold mb-4">4. Параметры</h3>
                 <p className="text-[#646C89] text-center py-4">
                   {!hasSelectedMethodology
                     ? 'Сначала выберите методику'
-                    : hasSelectedObject
+                    : isGazpromMethodology
+                      ? 'Методика «Газпром»: техкарта загружается сразу после выбора методики одним ответом.'
+                      : hasSelectedObject
                       ? isGazpromMethodology
                         ? 'Выберите элемент контроля, чтобы сразу загрузить полную техкарту'
                         : 'Выберите элемент контроля для загрузки параметров'
@@ -1115,22 +1182,34 @@ const TechCardForm = () => {
             {/* Кнопка для возврата к выбору */}
             <div className="flex items-center justify-between mb-2">
               <div className="text-sm text-[#646C89]">
-                Выбрано: <span className="text-white">{methodologyInputValue}</span> → <span className="text-white">{objectInputValue}</span> → <span className="text-white">{elementInputValue}</span>
+                {isGazpromMethodology ? (
+                  <>
+                    Выбрано: <span className="text-white">{methodologyInputValue}</span>
+                  </>
+                ) : (
+                  <>
+                    Выбрано: <span className="text-white">{methodologyInputValue}</span> → <span className="text-white">{objectInputValue}</span> → <span className="text-white">{elementInputValue}</span>
+                  </>
+                )}
               </div>
               <button
                 type="button"
                 onClick={() => {
+                  if (isGazpromMethodology) {
+                    resetMethodologySelection();
+                    return;
+                  }
                   resetLoadedTechCard();
                 }}
                 className="text-[#0084FF] hover:text-[#0084FF]/80 text-sm transition-colors"
               >
-                ← Изменить выбор
+                {isGazpromMethodology ? '← Изменить методику' : '← Изменить выбор'}
               </button>
             </div>
 
             {isGazpromMethodology && (
               <div className="bg-[#0C1515]/50 border border-[#FFFB78]/20 rounded-xl p-4 text-sm text-[#646C89]">
-                Методика «Газпром»: после выбора элемента техкарта загружается целиком, промежуточные пересчёты при каждом изменении поля не выполняются.
+                Методика «Газпром»: после выбора методики техкарта загружается целиком одним ответом, а варианты значений для полей берутся прямо из базы данных.
               </div>
             )}
 

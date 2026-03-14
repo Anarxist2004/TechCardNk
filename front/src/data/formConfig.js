@@ -184,7 +184,9 @@ export const buildTechCardPayload = (type, methodology, blocks, paramValues) => 
       
       params[block.id].params[param.id] = {
         name: param.name,
-        val: value !== undefined && value !== '' ? value : param.value
+        val: value !== undefined && value !== '' ? value : param.value,
+        options: Array.isArray(param.options) ? param.options : [],
+        typeData: param.typeData || 'string'
       };
     });
   });

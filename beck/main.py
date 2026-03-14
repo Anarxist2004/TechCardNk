@@ -4,7 +4,7 @@ import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 from repositories.postgresDataBase import PostgresDataBase
-from repositories.PostgreDbShablov import PostgreDbShablov
+from repositories.PostgreDbShablovGazprom import PostgreDbShablovGazprom
 
 from services.tech_card_service import TechCardService
 from services.tech_card import TechCardData
@@ -30,7 +30,6 @@ from services.Changers.ControlProcedure.ch_ControlProcedure import ControlProced
 
 from services.Changers.RegulatoryMethodologicalDocumentation.sh_Stub import Stub
 from services.Changers.Gazprom.ch_ExpandJsonPayloads import ExpandJsonPayloads
-from services.Changers.Gazprom.ch_RemoveEmptyParams import RemoveEmptyParams
 
 
 def fillRosatomPipeLine(pipeLine: PipeLine) -> None:
@@ -53,7 +52,6 @@ def fillRosatomPipeLine(pipeLine: PipeLine) -> None:
 def fillGazpromPipeLine(pipeLine: PipeLine) -> None:
     methodology_id = TechCardService.GAZPROM_METHODOLOGY
     pipeLine.addChanger(ExpandJsonPayloads(), methodology_id)
-    pipeLine.addChanger(RemoveEmptyParams(), methodology_id)
 
 
 def createPipeLine() -> PipeLine:
@@ -71,8 +69,8 @@ def main():
         TechCardService.ROSATOM_METHODOLOGY: PostgresDataBase(
             "host=localhost port=5432 dbname=techCard user=postgres password=admin"
         ),
-        TechCardService.GAZPROM_METHODOLOGY: PostgreDbShablov(
-            "host=localhost port=5435 dbname=welding_control_db user=postgres password=1"
+        TechCardService.GAZPROM_METHODOLOGY: PostgreDbShablovGazprom(
+            "host=localhost port=5432 dbname=welding_control_db user=postgres password=admin"
         ),
     }
     controller = ControllerWeb()

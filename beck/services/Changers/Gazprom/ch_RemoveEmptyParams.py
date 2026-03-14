@@ -27,6 +27,10 @@ class RemoveEmptyParams(IDataChanger):
         if param.get("image"):
             return True
 
+        options = param.get("options")
+        if isinstance(options, (list, tuple, set)):
+            return len(options) > 0
+
         value = param.get("val")
         if value is None:
             return False
