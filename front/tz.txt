@@ -1,0 +1,57 @@
+ def insert_param_to_block_reWrite(
+        self,
+        block_name: str,
+        insert_id: Union[int, str],
+        param: Dict[str, Any]
+    ) -> bool:
+        if "name" not in param:
+            raise ValueError("param должен содержать ключ 'name'")
+
+        # --- нормализация insert_id ---
+        try:
+            if isinstance(insert_id, str):
+                if "." in insert_id:
+                    raise ValueError
+                insert_id = int(insert_id)
+            else:
+                insert_id = int(insert_id)
+        except (ValueError, TypeError):
+            raise ValueError(f"insert_id должен быть целым числом, получено: {insert_id!r}")
+
+        for block in self.params.values():
+            if block.get("name") != block_name:
+                continue
+
+            params = block.setdefault("params", {})
+
+            # --- собираем только int-ключи ---
+            int_keys = [k for k in params.keys() if isinstance(k, int)]
+
+            # --- ищем параметр с тем же name ---
+            old_key = None
+            for k in int_keys:
+                if params[k].get("name") == param["name"]:
+                    old_key = k
+                    break
+
+            # --- если параметр уже есть — удаляем ---
+            if old_key is not None:
+                params.pop(old_key)
+                int_keys.remove(old_key)
+
+                # если удалённый был левее точки вставки — сдвигаем insert_id
+                if old_key < insert_id:
+                    insert_id -= 1
+
+            # --- сдвигаем хвост вправо начиная с insert_id ---
+            for k in sorted((k for k in int_keys if k >= insert_id), reverse=True):
+                params[k + 1] = params.pop(k)
+
+            # --- вставляем новый параметр ---
+            params[insert_id] = dict(param)
+
+            return True
+
+        return False
+
+

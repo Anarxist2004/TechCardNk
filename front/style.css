@@ -1,0 +1,723 @@
+/* Сброс и базовые стили */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Roboto', sans-serif;
+    background: #000;
+    min-height: 100vh;
+    overflow: hidden;
+    color: white;
+}
+
+/* Фон на всю страницу */
+.background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: 
+        conic-gradient(
+            from 225deg at 59.56% 105.28%, 
+            rgba(33, 38, 47, 0.50) 59deg, 
+            rgba(0, 131.75, 255, 0.50) 97deg, 
+            rgba(33, 38, 47, 0.50) 201deg
+        ), 
+        #646C89;
+}
+
+/* Общие стили для панелей */
+.panel {
+    position: fixed;
+    left: 40px;
+    right: 40px;
+    height: 80px;
+    background: #21262F;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    padding: 0 40px;
+}
+
+.panel-left, .panel-right {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+}
+
+.panel-right {
+    margin-left: auto;
+}
+
+/* Навигационная панель */
+.nav-panel {
+    top: 40px;
+    z-index: 100;
+}
+
+/* Общие стили для кнопок */
+.btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 24px;
+    color: white;
+    opacity: 0.9;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 400;
+    padding: 10px 20px;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.btn:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Кнопки навигации */
+.nav-btn {
+    font-size: 24px;
+}
+
+.nav-btn.active {
+    background: rgba(255, 255, 255, 0.15);
+    font-weight: 500;
+}
+
+/* Панель инструментов */
+.tools-panel {
+    top: 140px;
+    z-index: 90;
+    gap: 40px;
+}
+
+/* Кнопки инструментов */
+.tool-btn {
+    font-size: 20px;
+    opacity: 0.9;
+    padding: 10px 0;
+}
+
+/* Иконка */
+.icon {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.icon:hover {
+    opacity: 0.8;
+}
+
+.icon-img {
+    width: 48px;
+    height: 48px;
+}
+
+/* Основной контейнер для снимка и чата */
+.content-container {
+    position: fixed;
+    top: 220px;
+    left: 40px;
+    right: 40px;
+    bottom: 40px;
+    display: flex;
+    gap: 40px;
+}
+
+/* Левая часть - окно под снимок */
+.content-left {
+    flex: 1;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.photo-frame {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #333;
+    border-radius: 10px;
+    position: relative;
+    cursor: pointer;
+    transition: border-color 0.3s;
+}
+
+.photo-frame.drag-over {
+    border-color: #0083ff !important;
+    border-style: dashed !important;
+}
+
+.placeholder {
+    text-align: center;
+    color: #666;
+    font-size: 20px;
+    padding: 40px;
+}
+
+.upload-icon {
+    font-size: 60px;
+    margin-bottom: 20px;
+}
+
+.upload-hint {
+    display: block;
+    font-size: 16px;
+    color: #888;
+    margin-top: 10px;
+}
+
+.preview-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: none;
+}
+
+.image-controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    gap: 10px;
+}
+
+.control-btn {
+    width: 40px;
+    height: 40px;
+    background: rgba(33, 38, 47, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.control-btn:hover {
+    background: rgba(33, 38, 47, 1);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* Правая часть - чат с ИИ помощником */
+.content-right {
+    width: 400px;
+}
+
+.chat-frame {
+    width: 100%;
+    height: 100%;
+    border: 2px solid white;
+    border-radius: 12px;
+    background: rgba(33, 38, 47, 0.8);
+    backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.frame-header {
+    padding: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(33, 38, 47, 0.9);
+}
+
+.frame-header span {
+    font-size: 24px;
+    font-weight: 500;
+    font-family: 'Montserrat', sans-serif;
+}
+
+.frame-content {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.frame-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.frame-content::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.frame-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.message {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 15px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.message.user {
+    background: rgba(0, 131.75, 255, 0.3);
+    margin-left: auto;
+}
+
+.message.system {
+    background: rgba(255, 255, 255, 0.05);
+    font-style: italic;
+    max-width: 100%;
+}
+
+.frame-input {
+    padding: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    display: flex;
+    gap: 10px;
+    background: rgba(33, 38, 47, 0.9);
+}
+
+.input-field {
+    flex: 1;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: white;
+    font-size: 16px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.input-field:focus {
+    border-color: rgba(0, 131.75, 255, 0.5);
+}
+
+.input-field::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.send-btn {
+    width: 50px;
+    background: rgba(0, 131.75, 255, 0.5);
+    border-radius: 8px;
+    font-size: 20px;
+    padding: 0;
+}
+
+.send-btn:hover {
+    background: rgba(0, 131.75, 255, 0.7);
+}
+
+/* Медиа-запросы для адаптивности */
+@media (max-width: 1600px) {
+    .panel {
+        left: 30px;
+        right: 30px;
+        height: 70px;
+        padding: 0 30px;
+    }
+    
+    .nav-panel {
+        top: 30px;
+    }
+    
+    .tools-panel {
+        top: 120px;
+    }
+    
+    .content-container {
+        top: 195px;
+        left: 30px;
+        right: 30px;
+        bottom: 30px;
+        gap: 30px;
+    }
+    
+    .panel-left, .panel-right {
+        gap: 30px;
+    }
+    
+    .btn {
+        font-size: 22px;
+    }
+    
+    .nav-btn {
+        font-size: 22px;
+    }
+    
+    .tool-btn {
+        font-size: 18px;
+    }
+    
+    .icon-img {
+        width: 42px;
+        height: 42px;
+    }
+    
+    .content-right {
+        width: 350px;
+    }
+    
+    .frame-header span {
+        font-size: 22px;
+    }
+    
+    .placeholder {
+        font-size: 18px;
+        padding: 30px;
+    }
+    
+    .upload-icon {
+        font-size: 50px;
+    }
+}
+
+@media (max-width: 1366px) {
+    .panel {
+        left: 25px;
+        right: 25px;
+        height: 65px;
+        padding: 0 25px;
+    }
+    
+    .nav-panel {
+        top: 25px;
+    }
+    
+    .tools-panel {
+        top: 110px;
+    }
+    
+    .content-container {
+        top: 180px;
+        left: 25px;
+        right: 25px;
+        bottom: 25px;
+        gap: 25px;
+    }
+    
+    .panel-left, .panel-right {
+        gap: 25px;
+    }
+    
+    .btn {
+        font-size: 20px;
+        padding: 8px 16px;
+    }
+    
+    .nav-btn {
+        font-size: 20px;
+    }
+    
+    .tool-btn {
+        font-size: 16px;
+        padding: 8px 0;
+    }
+    
+    .icon-img {
+        width: 38px;
+        height: 38px;
+    }
+    
+    .content-right {
+        width: 300px;
+    }
+    
+    .frame-header span {
+        font-size: 20px;
+    }
+    
+    .frame-header, .frame-content, .frame-input {
+        padding: 15px;
+    }
+    
+    .message {
+        padding: 10px 14px;
+        font-size: 14px;
+    }
+    
+    .input-field {
+        font-size: 14px;
+        padding: 10px 14px;
+    }
+    
+    .send-btn {
+        width: 45px;
+        font-size: 18px;
+    }
+    
+    .placeholder {
+        font-size: 16px;
+        padding: 25px;
+    }
+    
+    .upload-icon {
+        font-size: 40px;
+    }
+    
+    .control-btn {
+        width: 35px;
+        height: 35px;
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 1024px) {
+    .panel {
+        left: 20px;
+        right: 20px;
+        height: 60px;
+        padding: 0 20px;
+    }
+    
+    .nav-panel {
+        top: 20px;
+    }
+    
+    .tools-panel {
+        top: 100px;
+        gap: 20px;
+    }
+    
+    .content-container {
+        top: 165px;
+        left: 20px;
+        right: 20px;
+        bottom: 20px;
+        gap: 20px;
+    }
+    
+    .panel-left, .panel-right {
+        gap: 20px;
+    }
+    
+    .btn {
+        font-size: 18px;
+        padding: 6px 12px;
+    }
+    
+    .nav-btn {
+        font-size: 18px;
+    }
+    
+    .tool-btn {
+        font-size: 14px;
+        padding: 6px 0;
+    }
+    
+    .icon-img {
+        width: 34px;
+        height: 34px;
+    }
+    
+    .content-right {
+        width: 250px;
+    }
+    
+    .frame-header span {
+        font-size: 18px;
+    }
+    
+    .message {
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+    
+    .input-field {
+        font-size: 13px;
+        padding: 8px 12px;
+    }
+    
+    .send-btn {
+        width: 40px;
+        font-size: 16px;
+    }
+    
+    .placeholder {
+        font-size: 14px;
+        padding: 20px;
+    }
+    
+    .upload-icon {
+        font-size: 30px;
+    }
+    
+    .control-btn {
+        width: 30px;
+        height: 30px;
+        font-size: 14px;
+    }
+}
+
+/* Панель управления под областью снимка */
+.image-controls-panel {
+    margin-top: 20px;
+    background: #21262F;
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.image-info {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.image-info span {
+    font-size: 16px;
+    color: white;
+    opacity: 0.9;
+}
+
+.image-info #fileName {
+    font-weight: 500;
+    font-size: 18px;
+}
+
+.image-info #fileSize {
+    font-size: 14px;
+    opacity: 0.7;
+}
+
+.control-buttons {
+    display: flex;
+    gap: 15px;
+}
+
+.control-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.2s;
+    min-width: 140px;
+}
+
+.control-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-icon {
+    font-size: 20px;
+}
+
+.btn-text {
+    font-size: 16px;
+    font-weight: 500;
+}
+
+/* Убираем старые контролы внутри фото-фрейма */
+.photo-frame .image-controls {
+    display: none;
+}
+
+/* Адаптивность для панели управления */
+@media (max-width: 1366px) {
+    .image-controls-panel {
+        padding: 15px;
+    }
+    
+    .control-btn {
+        padding: 10px 16px;
+        min-width: 120px;
+    }
+    
+    .btn-icon {
+        font-size: 18px;
+    }
+    
+    .btn-text {
+        font-size: 15px;
+    }
+    
+    .image-info #fileName {
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 1024px) {
+    .image-controls-panel {
+        flex-direction: column;
+        gap: 15px;
+        align-items: stretch;
+    }
+    
+    .control-buttons {
+        justify-content: space-between;
+    }
+    
+    .control-btn {
+        flex: 1;
+        justify-content: center;
+        min-width: auto;
+    }
+}
+
+/* Анимация для иконки загрузки */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.upload-icon[style*="animation"] {
+    animation: spin 1s linear infinite !important;
+}
+
+/* Информация о файле в панели управления */
+.image-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.image-info span {
+    font-size: 14px;
+    color: white;
+    opacity: 0.9;
+}
+
+.image-info #fileName {
+    font-weight: 500;
+    font-size: 16px;
+    margin-bottom: 5px;
+}
+
+.image-info #fileSize {
+    opacity: 0.8;
+}
+
+.image-info #fileDimensions {
+    opacity: 0.8;
+}
+
+.image-info #fileFormat {
+    opacity: 0.7;
+    font-style: italic;
+}
