@@ -64,33 +64,33 @@ def createPipeLine() -> PipeLine:
 test = False
 
 
-# def main():
-#     repos = {
-#         TechCardService.ROSATOM_METHODOLOGY: PostgresDataBase(
-#             "host=localhost port=5432 dbname=techCard user=postgres password=admin"
-#         ),
-#         TechCardService.GAZPROM_METHODOLOGY: PostgreDbShablovGazprom(
-#             "host=localhost port=5432 dbname=welding_control_db user=postgres password=admin"
-#         ),
-#     }
-#     controller = ControllerWeb()
-#     service = TechCardService(repos, createPipeLine())
-#     controller.setServise(service)
-#     create_adapter(controller)
-
 def main():
     repos = {
         TechCardService.ROSATOM_METHODOLOGY: PostgresDataBase(
-            "host=localhost port=5435 dbname=techCard user=postgres password=1"
+            "host=localhost port=5432 dbname=techCard user=postgres password=admin"
         ),
         TechCardService.GAZPROM_METHODOLOGY: PostgreDbShablovGazprom(
-            "host=localhost port=5435 dbname=welding_control_db user=postgres password=1"
+            "host=localhost port=5432 dbname=welding_control_db user=postgres password=admin"
         ),
     }
     controller = ControllerWeb()
     service = TechCardService(repos, createPipeLine())
     controller.setServise(service)
     create_adapter(controller)
+
+# def main():
+#     repos = {
+#         TechCardService.ROSATOM_METHODOLOGY: PostgresDataBase(
+#             "host=localhost port=5435 dbname=techCard user=postgres password=1"
+#         ),
+#         TechCardService.GAZPROM_METHODOLOGY: PostgreDbShablovGazprom(
+#             "host=localhost port=5435 dbname=welding_control_db user=postgres password=1"
+#         ),
+#     }
+#     controller = ControllerWeb()
+#     service = TechCardService(repos, createPipeLine())
+#     controller.setServise(service)
+#     create_adapter(controller)
 
 if __name__ == "__main__":
         main()

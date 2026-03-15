@@ -1,5 +1,6 @@
 import json
 from typing import Any, Dict, List
+from pathlib import Path
 
 from repositories.PostgreDbShablov import PostgreDbShablov
 from services.tech_card import TechCardData
@@ -7,6 +8,8 @@ from services.tech_card import TechCardData
 
 class PostgreDbShablovGazprom(PostgreDbShablov):
     GAZPROM_METHODOLOGY = 1
+    DISPLAY_MODE_NUMBER_ONLY = "number_only"
+    RES_DIR = Path(__file__).resolve().parent.parent / "res"
 
     BLOCK_LAYOUT: Dict[int, Dict[str, Any]] = {
         1: {
@@ -171,6 +174,8 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
     }
 
     OPERATION_FIELD_IDS = ["4.1", "4.2", "4.3", "4.4", "4.5"]
+    SCHEME_BLOCK_ID = 6
+    SCHEME_PARAM_ID = "1"
 
     def _is_db_available(self) -> bool:
         return bool(self.conn and self.cursor)
@@ -188,6 +193,13 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         if isinstance(value, (dict, list)):
             return value
         return str(value)
+
+    def _get_default_display_mode(self, block_id: int, param_id: str) -> str | None:
+        if block_id in (9, 10):
+            return self.DISPLAY_MODE_NUMBER_ONLY
+        if block_id == 8 and str(param_id) in {"4", "4.1", "4.2", "4.3", "4.4", "4.5"}:
+            return self.DISPLAY_MODE_NUMBER_ONLY
+        return None
 
     def _fetch_distinct_values(self, query: str, params: tuple = (), key: str = "name") -> List[str]:
         rows = self._fetch_all_rows(query, params)
@@ -217,6 +229,356 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
             return value
         return json.dumps(value, ensure_ascii=False)
 
+    def _get_param(self, source: TechCardData | Dict[int, Dict[str, Any]], block_id: int, param_id: str) -> Dict[str, Any] | None:
+        blocks = source.params if isinstance(source, TechCardData) else source
+        block = blocks.get(block_id) or blocks.get(str(block_id))
+        if not isinstance(block, dict):
+            return None
+        params = block.get("params", {})
+        if not isinstance(params, dict):
+            return None
+        return params.get(str(param_id))
+
+    def _get_param_value(self, source: TechCardData | Dict[int, Dict[str, Any]], block_id: int, param_id: str) -> str:
+        param = self._get_param(source, block_id, param_id)
+        if not isinstance(param, dict):
+            return ""
+        return str(param.get("val") or "").strip()
+
+    def _resolve_welded_joint_type_id(self, source: TechCardData | Dict[int, Dict[str, Any]]) -> int | None:
+        joint_type_name = (
+            self._get_param_value(source, 4, "1")
+            or self._get_param_value(source, 1, "6")
+        )
+        if not joint_type_name:
+            return None
+
+        row = self._fetch_one_row(
+            """
+            SELECT id
+            FROM welded_joint_types
+            WHERE name = %s
+            LIMIT 1
+            """,
+            (joint_type_name,),
+        )
+        if not row:
+            return None
+        try:
+            return int(row.get("id"))
+        except (TypeError, ValueError):
+            return None
+
+    def _resolve_drawing_number_id(self, source: TechCardData | Dict[int, Dict[str, Any]]) -> int | None:
+        drawing_number_name = self._get_param_value(source, 1, "3")
+        if not drawing_number_name:
+            return None
+
+        row = self._fetch_one_row(
+            """
+            SELECT id
+            FROM drawing_numbers
+            WHERE name = %s
+            LIMIT 1
+            """,
+            (drawing_number_name,),
+        )
+        if not row:
+            return None
+        try:
+            return int(row.get("id"))
+        except (TypeError, ValueError):
+            return None
+
+    def _resolve_designation_id(self, source: TechCardData | Dict[int, Dict[str, Any]]) -> int | None:
+        designation_name = self._get_param_value(source, 1, "7")
+        drawing_number_id = self._resolve_drawing_number_id(source)
+        if not designation_name:
+            return None
+
+        if drawing_number_id is not None:
+            row = self._fetch_one_row(
+                """
+                SELECT id
+                FROM designations
+                WHERE name = %s AND drawing_number_id = %s
+                LIMIT 1
+                """,
+                (designation_name, drawing_number_id),
+            )
+        else:
+            row = self._fetch_one_row(
+                """
+                SELECT id
+                FROM designations
+                WHERE name = %s
+                LIMIT 1
+                """,
+                (designation_name,),
+            )
+
+        if not row:
+            return None
+        try:
+            return int(row.get("id"))
+        except (TypeError, ValueError):
+            return None
+
+    def _resolve_controlled_element_id(self, source: TechCardData | Dict[int, Dict[str, Any]]) -> int | None:
+        element_name = self._get_param_value(source, 1, "4")
+        if not element_name:
+            return None
+
+        row = self._fetch_one_row(
+            """
+            SELECT id
+            FROM controlled_elements
+            WHERE name = %s
+            LIMIT 1
+            """,
+            (element_name,),
+        )
+        if not row:
+            return None
+        try:
+            return int(row.get("id"))
+        except (TypeError, ValueError):
+            return None
+
+    def _get_transmission_scheme_foreign_keys(self) -> List[Dict[str, Any]]:
+        return self._fetch_all_rows(
+            """
+            SELECT
+                kcu.column_name,
+                ccu.table_name AS foreign_table_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+              ON tc.constraint_name = kcu.constraint_name
+             AND tc.table_schema = kcu.table_schema
+            JOIN information_schema.constraint_column_usage ccu
+              ON ccu.constraint_name = tc.constraint_name
+             AND ccu.table_schema = tc.table_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+              AND tc.table_schema = 'public'
+              AND tc.table_name = 'transmission_schemes'
+            ORDER BY kcu.ordinal_position
+            """
+        )
+
+    def _build_transmission_scheme_context(self, source: TechCardData | Dict[int, Dict[str, Any]]) -> Dict[str, int | None]:
+        return {
+            "welded_joint_types": self._resolve_welded_joint_type_id(source),
+            "drawing_numbers": self._resolve_drawing_number_id(source),
+            "designations": self._resolve_designation_id(source),
+            "controlled_elements": self._resolve_controlled_element_id(source),
+        }
+
+    def _get_transmission_scheme_rows(self, source: TechCardData | Dict[int, Dict[str, Any]]) -> List[Dict[str, Any]]:
+        foreign_keys = self._get_transmission_scheme_foreign_keys()
+        if not foreign_keys:
+            return self._fetch_all_rows(
+                """
+                SELECT id, reference
+                FROM transmission_schemes
+                ORDER BY id
+                """
+            )
+
+        context = self._build_transmission_scheme_context(source)
+        conditions = []
+        params: List[Any] = []
+
+        for foreign_key in foreign_keys:
+            column_name = str(foreign_key.get("column_name") or "")
+            foreign_table_name = str(foreign_key.get("foreign_table_name") or "")
+            if not column_name:
+                continue
+
+            selected_parent_id = context.get(foreign_table_name)
+            if selected_parent_id is None:
+                conditions.append(f"ts.{column_name} IS NULL")
+            else:
+                conditions.append(f"(ts.{column_name} IS NULL OR ts.{column_name} = %s)")
+                params.append(selected_parent_id)
+
+        query = """
+            SELECT ts.id, ts.reference
+            FROM transmission_schemes ts
+        """
+        if conditions:
+            query += "\nWHERE " + "\n  AND ".join(conditions)
+        query += "\nORDER BY ts.id"
+
+        return self._fetch_all_rows(query, tuple(params))
+
+    def _get_existing_column_name(self, table_name: str, column_candidates: List[str]) -> str | None:
+        if not column_candidates:
+            return None
+
+        rows = self._fetch_all_rows(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = %s
+            """,
+            (table_name,),
+        )
+        existing_columns = {str(row.get("column_name") or "") for row in rows}
+
+        for column_name in column_candidates:
+            if column_name in existing_columns:
+                return column_name
+
+        return None
+
+    def _normalise_res_path(self, image_path: Any) -> str | None:
+        if image_path in (None, ""):
+            return None
+
+        normalised = str(image_path).strip().replace("\\", "/")
+        if not normalised:
+            return None
+
+        res_marker = "/res/"
+        if res_marker in normalised:
+            normalised = normalised[normalised.index(res_marker) + 1:]
+
+        if normalised.startswith("res/"):
+            return normalised
+
+        if "/" not in normalised:
+            candidate_path = self.RES_DIR / normalised
+            if candidate_path.exists():
+                return f"res/{candidate_path.name}"
+
+        return None
+
+    def _find_scheme_image_fallback(self, transmission_scheme_id: int | None) -> str | None:
+        if transmission_scheme_id is None or not self.RES_DIR.exists():
+            return None
+
+        for file_path in sorted(self.RES_DIR.glob("*")):
+            if not file_path.is_file():
+                continue
+
+            stem = file_path.stem.lower()
+            if stem in {f"sheme{transmission_scheme_id}", f"scheme{transmission_scheme_id}"}:
+                return f"res/{file_path.name}"
+
+        return None
+
+    def _get_transmission_scheme_image_path(self, selected_row: Dict[str, Any] | None) -> str | None:
+        if not selected_row:
+            return None
+
+        transmission_scheme_id = selected_row.get("id")
+        try:
+            transmission_scheme_id = int(transmission_scheme_id) if transmission_scheme_id is not None else None
+        except (TypeError, ValueError):
+            transmission_scheme_id = None
+
+        image_column = self._get_existing_column_name(
+            "transmission_schemes",
+            ["image", "image_path", "img", "picture", "schema_image", "scheme_image", "path"],
+        )
+        if image_column and transmission_scheme_id is not None:
+            row = self._fetch_one_row(
+                f"""
+                SELECT {image_column} AS image_path
+                FROM transmission_schemes
+                WHERE id = %s
+                LIMIT 1
+                """,
+                (transmission_scheme_id,),
+            )
+            image_path = self._normalise_res_path(row.get("image_path") if row else None)
+            if image_path:
+                return image_path
+
+        reference_path = self._normalise_res_path(selected_row.get("reference"))
+        if reference_path:
+            return reference_path
+
+        return self._find_scheme_image_fallback(transmission_scheme_id)
+
+    def _apply_scheme_params(self, blocks: Dict[int, Dict[str, Any]], transmission_scheme_id: int) -> None:
+        scheme_params = self._fetch_all_rows(
+            """
+            SELECT name, val
+            FROM params_transmission_scheme
+            WHERE transmission_schemes_id = %s
+            ORDER BY id
+            """,
+            (transmission_scheme_id,),
+        )
+
+        scheme_field_types = {
+            str(field["name"]): field.get("typeData", "string")
+            for field in self.BLOCK_LAYOUT[self.SCHEME_BLOCK_ID]["fields"]
+            if str(field["id"]) != self.SCHEME_PARAM_ID
+        }
+
+        next_param_index = 2
+        for row in scheme_params:
+            param_name = str(row.get("name") or "").strip()
+            if not param_name:
+                continue
+
+            self._set_param(
+                blocks,
+                self.SCHEME_BLOCK_ID,
+                str(next_param_index),
+                param_name,
+                row.get("val"),
+                type_data=scheme_field_types.get(param_name, "string"),
+            )
+            next_param_index += 1
+
+    def _apply_scheme_to_blocks(
+        self,
+        blocks: Dict[int, Dict[str, Any]],
+        source: TechCardData | Dict[int, Dict[str, Any]],
+        selected_reference: str | None = None,
+    ) -> None:
+        block = self._ensure_block(blocks, self.SCHEME_BLOCK_ID)
+        block["name"] = self.BLOCK_LAYOUT[self.SCHEME_BLOCK_ID]["name"]
+        block["params"] = {}
+
+        scheme_rows = self._get_transmission_scheme_rows(source)
+        scheme_options = [str(row.get("reference")) for row in scheme_rows if row.get("reference")]
+
+        selected_row = None
+        if selected_reference:
+            selected_row = next(
+                (row for row in scheme_rows if str(row.get("reference") or "") == selected_reference),
+                None,
+            )
+        if selected_row is None and scheme_rows:
+            selected_row = scheme_rows[0]
+
+        selected_value = str(selected_row.get("reference")) if selected_row else ""
+        self._set_param(
+            blocks,
+            self.SCHEME_BLOCK_ID,
+            self.SCHEME_PARAM_ID,
+            "Схема просвечивания",
+            selected_value,
+            options=scheme_options,
+        )
+
+        if selected_row and selected_row.get("id") is not None:
+            image_path = self._get_transmission_scheme_image_path(selected_row)
+            if image_path:
+                self._set_param(
+                    blocks,
+                    self.SCHEME_BLOCK_ID,
+                    "1.1",
+                    "Схема просвечивания",
+                    image=image_path,
+                )
+            self._apply_scheme_params(blocks, int(selected_row["id"]))
+
     def _ensure_block(self, blocks: Dict[int, Dict[str, Any]], block_id: int) -> Dict[str, Any]:
         block = blocks.get(block_id)
         if block is None:
@@ -237,19 +599,89 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         options: List[str] | None = None,
         type_data: str | None = None,
         image: Any = None,
+        display_mode: str | None = None,
     ) -> None:
         block = self._ensure_block(blocks, block_id)
         existing = block["params"].get(str(param_id), {})
+        resolved_display_mode = (
+            display_mode
+            or existing.get("displayMode")
+            or self._get_default_display_mode(block_id, str(param_id))
+        )
         block["params"][str(param_id)] = {
             "name": name,
             "val": self._normalise_value(value),
             "options": existing.get("options", []) if options is None else options,
             "typeData": existing.get("typeData", "string") if type_data is None else type_data,
         }
+        if resolved_display_mode:
+            block["params"][str(param_id)]["displayMode"] = resolved_display_mode
         if image is not None:
             block["params"][str(param_id)]["image"] = image
         elif "image" in existing:
             block["params"][str(param_id)]["image"] = existing["image"]
+
+    def _mark_number_only_params(self, blocks: Dict[int, Dict[str, Any]], block_id: int, param_ids: List[str]) -> None:
+        block = self._ensure_block(blocks, block_id)
+        params = block.get("params", {})
+        if not isinstance(params, dict):
+            return
+
+        for param_id in param_ids:
+            param = params.get(str(param_id))
+            if not isinstance(param, dict):
+                continue
+            param["displayMode"] = self.DISPLAY_MODE_NUMBER_ONLY
+
+    def _clear_display_mode_params(self, blocks: Dict[int, Dict[str, Any]], block_id: int, param_ids: List[str]) -> None:
+        block = self._ensure_block(blocks, block_id)
+        params = block.get("params", {})
+        if not isinstance(params, dict):
+            return
+
+        for param_id in param_ids:
+            param = params.get(str(param_id))
+            if not isinstance(param, dict):
+                continue
+            param.pop("displayMode", None)
+
+    def _apply_special_display_modes(self, blocks: Dict[int, Dict[str, Any]]) -> None:
+        self._clear_display_mode_params(blocks, 8, ["4.5.1", "4.5.2"])
+        self._mark_number_only_params(
+            blocks,
+            8,
+            ["4", "4.1", "4.2", "4.3", "4.4", "4.5"],
+        )
+        self._mark_number_only_params(blocks, 9, ["1", "2", "3", "4"])
+        self._mark_number_only_params(blocks, 10, ["1", "2", "3", "4", "5", "6", "7"])
+
+    def _ensure_block_layout_fields(self, blocks: Dict[int, Dict[str, Any]], block_id: int) -> None:
+        block = self._ensure_block(blocks, block_id)
+        params = block.setdefault("params", {})
+
+        for field in self.BLOCK_LAYOUT[block_id]["fields"]:
+            field_id = str(field["id"])
+            existing = params.get(field_id)
+
+            if isinstance(existing, dict):
+                existing.setdefault("name", field["name"])
+                existing.setdefault("val", self._normalise_value(field.get("default", "")))
+                existing.setdefault("options", [])
+                existing.setdefault("typeData", field.get("typeData", "string"))
+                default_display_mode = self._get_default_display_mode(block_id, field_id)
+                if default_display_mode:
+                    existing.setdefault("displayMode", default_display_mode)
+                continue
+
+            params[field_id] = {
+                "name": field["name"],
+                "val": self._normalise_value(field.get("default", "")),
+                "options": [],
+                "typeData": field.get("typeData", "string"),
+            }
+            default_display_mode = self._get_default_display_mode(block_id, field_id)
+            if default_display_mode:
+                params[field_id]["displayMode"] = default_display_mode
 
     def _build_options_map(self) -> Dict[str, List[str]]:
         if not self._is_db_available():
@@ -281,6 +713,7 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
                     type_data=field.get("typeData", "string"),
                 )
 
+        self._apply_special_display_modes(blocks)
         return blocks
 
     def _resolve_element_id(self, element_id: int | str | None) -> int:
@@ -423,9 +856,10 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
     def _fill_block_6(
         self,
         blocks: Dict[int, Dict[str, Any]],
-        transmission_scheme: Dict[str, Any] | None,
+        source: TechCardData | Dict[int, Dict[str, Any]],
+        selected_reference: str | None = None,
     ) -> None:
-        self._set_param(blocks, 6, "1", "Схема просвечивания", transmission_scheme.get("reference") if transmission_scheme else "")
+        self._apply_scheme_to_blocks(blocks, source, selected_reference)
 
     def _fill_block_7(self, blocks: Dict[int, Dict[str, Any]], preparation_row: Dict[str, Any] | None) -> None:
         self._set_param(blocks, 7, "1", "Требования к качеству поверхности", preparation_row.get("surface_quality_requirement_name") if preparation_row else "")
@@ -653,17 +1087,6 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
             (designation_id,),
         ) if designation_id else []
 
-        transmission_scheme = self._fetch_one_row(
-            """
-            SELECT reference
-            FROM transmission_schemes
-            WHERE welded_joint_type_id = %s
-            ORDER BY id
-            LIMIT 1
-            """,
-            (designation_params.get("welded_joint_type_id"),),
-        ) if designation_params and designation_params.get("welded_joint_type_id") else None
-
         operations_rows = self._fetch_all_rows(
             """
             SELECT operation_name
@@ -688,15 +1111,29 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
             (designation_id,),
         ) if designation_id else []
 
-        quality_rows = self._fetch_all_rows(
-            """
-            SELECT parameters
-            FROM quality_assessment_types
-            WHERE designation_id = %s
-            ORDER BY id
-            """,
-            (designation_id,),
-        ) if designation_id else []
+        if designation_id and drawing_number_id:
+            quality_rows = self._fetch_all_rows(
+                """
+                SELECT parameters
+                FROM quality_assessment_types
+                WHERE designation_id = %s
+                  AND drawing_numbers_id = %s
+                ORDER BY id
+                """,
+                (designation_id, drawing_number_id),
+            )
+        elif designation_id:
+            quality_rows = self._fetch_all_rows(
+                """
+                SELECT parameters
+                FROM quality_assessment_types
+                WHERE designation_id = %s
+                ORDER BY id
+                """,
+                (designation_id,),
+            )
+        else:
+            quality_rows = []
 
         permissible_rows = self._fetch_all_rows(
             """
@@ -717,17 +1154,19 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         self._fill_block_3(blocks, designation_params)
         self._fill_block_4(blocks, designation_params, dimensions_rows)
         self._fill_block_5(blocks, designation_params, film_loading_rows, film_usage_rows, control_term_row)
-        self._fill_block_6(blocks, transmission_scheme)
+        self._fill_block_6(blocks, blocks)
         self._fill_block_7(blocks, preparation_row)
         self._fill_block_8(blocks, control_term_row, operations_rows)
         self._fill_block_9(blocks, decoding_rows)
         self._fill_block_10(blocks, quality_rows, permissible_rows)
+        self._apply_special_display_modes(blocks)
 
         return blocks
 
     def get_params_for_type(self, type_id) -> TechCardData:
         tech_card = self._create_card()
         tech_card.params = self._build_template_blocks()
+        self._fill_block_6(tech_card.params, tech_card.params)
         return tech_card
 
     def get_all_controlled_element_types(self) -> TechCardData:
@@ -782,6 +1221,7 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
                             "val": param.get("options", []),
                             "options": param.get("options", []),
                             "typeData": param.get("typeData", "string"),
+                            "displayMode": param.get("displayMode"),
                         }
                     },
                 }
@@ -789,6 +1229,11 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
             return tech_card
 
         return self._create_card()
+
+    def sync_tech_card(self, tech_card: TechCardData) -> TechCardData:
+        selected_reference = self._get_param_value(tech_card, self.SCHEME_BLOCK_ID, self.SCHEME_PARAM_ID)
+        self._fill_block_6(tech_card.params, tech_card, selected_reference)
+        return tech_card
 
     def get_params_for_element(self, element_id: int) -> TechCardData:
         tech_card = self._create_card()

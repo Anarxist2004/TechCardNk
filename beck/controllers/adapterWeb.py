@@ -4,10 +4,16 @@ from interfaces.i_controllers import IControllers
 import uvicorn
 from fastapi import Body
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 
 urlObjec = "object"
 
 app = FastAPI()
+res_dir = Path(__file__).resolve().parent.parent / "res"
+if res_dir.exists():
+    app.mount("/res", StaticFiles(directory=str(res_dir)), name="res")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # для теста

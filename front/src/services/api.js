@@ -113,6 +113,7 @@ function transformBlocksResponse(data) {
           value: param.val,
           options: Array.isArray(param.options) ? param.options : [],
           typeData: param.typeData || 'string',
+          displayMode: param.displayMode || null,
           image: param.image || null,
           blockId: blockId,
           blockName: block.name

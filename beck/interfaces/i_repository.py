@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar, List
+from typing import Generic, TypeVar
 
 T = TypeVar('T')
+
 
 class IRepository(ABC, Generic[T]):
     @abstractmethod
@@ -21,23 +22,24 @@ class IRepository(ABC, Generic[T]):
         pass
 
     @abstractmethod
-    def get_params_for_type(self, type_id):#получение параметров всех типов контролирующего элемента
+    def get_params_for_type(self, type_id):
         pass
 
     @abstractmethod
-    def get_all_controlled_element_types(self)->T:#получение всех типов контролируемых эементов
-        pass
-    
-    @abstractmethod
-    def get_all_objects_by_type_id(self, type_id)->T:#получние все контролируемых элементов по id типа
+    def get_all_controlled_element_types(self) -> T:
         pass
 
     @abstractmethod
-    def get_all_possible_values_by_param_and_element(self, element_type_id,param_id)->T:
+    def get_all_objects_by_type_id(self, type_id) -> T:
+        pass
+
+    @abstractmethod
+    def get_all_possible_values_by_param_and_element(self, element_type_id, param_id) -> T:
         pass
 
     @abstractmethod
     def get_params_for_element(self, element_id: int) -> T:
-        """Получить все параметры и их значения для конкретного элемента (objectControl) по его id."""
         pass
 
+    def sync_tech_card(self, tech_card: T) -> T:
+        return tech_card

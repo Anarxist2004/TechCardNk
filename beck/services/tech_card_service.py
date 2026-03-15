@@ -67,7 +67,9 @@ class TechCardService(IServise):
 
     def updateTechCard(self, techCard) -> TechCardData:
         methodology_id = self._normalise_methodology(techCard.getMethodology())
+        repo = self._get_repo(methodology_id)
         techCard.methodology = methodology_id
+        techCard = repo.sync_tech_card(techCard)
         self.pipeLine.process(techCard, methodology_id)
         return techCard
 
