@@ -971,6 +971,40 @@ const TechCardForm = () => {
     return { filled, total };
   };
 
+  const getTabProgress = (tab) => {
+    if (!tab?.blocks?.length) {
+      return {
+        completedBlocks: 0,
+        totalBlocks: 0,
+        filledFields: 0,
+        totalFields: 0,
+        isComplete: false,
+      };
+    }
+
+    const progressSummary = tab.blocks.reduce((summary, block) => {
+      const blockProgress = getBlockProgress(block);
+      const blockComplete = isBlockComplete(block);
+
+      return {
+        completedBlocks: summary.completedBlocks + (blockComplete ? 1 : 0),
+        totalBlocks: summary.totalBlocks + 1,
+        filledFields: summary.filledFields + blockProgress.filled,
+        totalFields: summary.totalFields + blockProgress.total,
+      };
+    }, {
+      completedBlocks: 0,
+      totalBlocks: 0,
+      filledFields: 0,
+      totalFields: 0,
+    });
+
+    return {
+      ...progressSummary,
+      isComplete: progressSummary.totalBlocks > 0 && progressSummary.completedBlocks === progressSummary.totalBlocks,
+    };
+  };
+
   // Загрузка начальных данных при старте
   useEffect(() => {
     const loadInitialData = async () => {
@@ -1698,6 +1732,7 @@ const TechCardForm = () => {
                 <div className="flex min-w-max gap-2 rounded-xl border border-[#646C89]/20 bg-[#0C1515]/60 p-2">
                   {blockTabs.map((tab) => {
                     const isActiveTab = tab.id === activeTab?.id;
+                    const tabProgress = getTabProgress(tab);
 
                     return (
                       <button
@@ -1710,14 +1745,31 @@ const TechCardForm = () => {
                           backgroundColor: isActiveTab ? 'var(--nk-accent-primary-soft)' : 'rgba(12, 21, 21, 0.18)',
                         }}
                       >
-                        <div className="text-sm font-semibold" style={{ color: isActiveTab ? 'var(--nk-text-primary)' : 'var(--nk-text-secondary)' }}>
-                          {tab.label}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-semibold" style={{ color: isActiveTab ? 'var(--nk-text-primary)' : 'var(--nk-text-secondary)' }}>
+                            {tab.label}
+                          </div>
+                          {tabProgress.isComplete ? (
+                            <CheckCircle
+                              size={16}
+                              style={{ color: 'var(--nk-accent-secondary)' }}
+                            />
+                          ) : (
+                            <AlertCircle
+                              size={16}
+                              style={{ color: 'var(--nk-accent-primary)' }}
+                            />
+                          )}
                         </div>
                         <div className="mt-1 text-xs" style={{ color: 'var(--nk-text-muted)' }}>
                           {tab.description}
                         </div>
                         <div className="mt-3 text-[11px] uppercase tracking-[0.14em]" style={{ color: isActiveTab ? 'var(--nk-accent-secondary)' : 'var(--nk-text-muted)' }}>
                           Разделов: {tab.blocks.length}
+                        </div>
+                        <div className="mt-2 flex items-center justify-between text-[11px]" style={{ color: 'var(--nk-text-muted)' }}>
+                          <span>{tabProgress.completedBlocks}/{tabProgress.totalBlocks} блоков</span>
+                          <span>{tabProgress.filledFields}/{tabProgress.totalFields} полей</span>
                         </div>
                       </button>
                     );
