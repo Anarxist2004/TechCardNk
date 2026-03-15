@@ -15,7 +15,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0C1515] text-white">
+    <div className="nk-app min-h-screen bg-[#0C1515] text-white">
       {/* Шапка */}
       <header className="bg-[#21262F] border-b border-[#646C89]/30 py-6 px-8">
         <div className="flex items-center justify-between max-w-7xl mx-auto">

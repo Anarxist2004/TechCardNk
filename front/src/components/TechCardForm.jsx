@@ -9,6 +9,65 @@ const GAZPROM_METHODOLOGY_ID = '1';
 const DISPLAY_MODE_NUMBER_ONLY = 'number_only';
 const DISPLAY_MODE_IMAGE_FULL = 'image_full';
 const GAZPROM_SCHEME_PARAM_KEY = '6.1';
+const DEFAULT_ACTIVE_TAB = 'overview';
+
+const BLOCK_TAB_GROUPS = [
+  {
+    id: 'overview',
+    label: 'Контекст',
+    description: 'Объект, документация и размеры',
+    blockIds: [1, 2, 3, 4],
+  },
+  {
+    id: 'setup',
+    label: 'Оснащение',
+    description: 'Средства, схема и подготовка',
+    blockIds: [5, 6, 7],
+  },
+  {
+    id: 'operations',
+    label: 'Контроль',
+    description: 'Порядок проведения операций',
+    blockIds: [8],
+  },
+  {
+    id: 'assessment',
+    label: 'Оценка',
+    description: 'Расшифровка и качество',
+    blockIds: [9, 10],
+  },
+];
+
+const EXTRA_BLOCK_TAB = {
+  id: 'other',
+  label: 'Дополнительно',
+  description: 'Прочие разделы техкарты',
+};
+
+const getBlockTabId = (blockId) => {
+  const normalizedBlockId = Number(blockId);
+  const matchedGroup = BLOCK_TAB_GROUPS.find((group) => group.blockIds.includes(normalizedBlockId));
+  return matchedGroup?.id || EXTRA_BLOCK_TAB.id;
+};
+
+const buildBlockTabs = (blocks = []) => {
+  const tabs = BLOCK_TAB_GROUPS
+    .map((group) => ({
+      ...group,
+      blocks: blocks.filter((block) => group.blockIds.includes(Number(block.id))),
+    }))
+    .filter((group) => group.blocks.length > 0);
+
+  const extraBlocks = blocks.filter((block) => getBlockTabId(block.id) === EXTRA_BLOCK_TAB.id);
+  if (extraBlocks.length > 0) {
+    tabs.push({
+      ...EXTRA_BLOCK_TAB,
+      blocks: extraBlocks,
+    });
+  }
+
+  return tabs;
+};
 
 const normalizeSuggestionOptions = (options) => {
   if (!Array.isArray(options)) {
@@ -247,7 +306,7 @@ const ComboBoxField = ({ label, value, inputValue, options, onChange,
             w-full bg-[#0C1515] border border-[#646C89]
             rounded-lg px-4 py-3 pr-10
             text-white placeholder-[#646C89]
-            focus:outline-none focus:border-[#0084FF]
+            focus:outline-none focus:border-[#D97B54]
             transition-colors
             ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
           `}
@@ -261,7 +320,7 @@ const ComboBoxField = ({ label, value, inputValue, options, onChange,
             type="button"
             onClick={() => !disabled && setIsOpen(!isOpen)}
             disabled={disabled}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#646C89] hover:text-[#0084FF]"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#646C89] hover:text-[#D97B54]"
           >
             <ChevronDown size={18} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
           </button>
@@ -280,8 +339,8 @@ const ComboBoxField = ({ label, value, inputValue, options, onChange,
                   onClick={() => handleSelectOption(option)}
                   className={`
                     w-full text-left px-4 py-3
-                    hover:bg-[#0084FF]/20 transition-colors
-                    ${value === option.id ? 'bg-[#0084FF]/10 text-[#0084FF]' : 'text-white'}
+                    hover:bg-[#D97B54]/20 transition-colors
+                    ${value === option.id ? 'bg-[#D97B54]/10 text-[#D97B54]' : 'text-white'}
                   `}
                 >
                   {option.name}
@@ -475,7 +534,7 @@ const TableRowInput = ({
     <tr className="border-b border-[#646C89]/20 hover:bg-[#646C89]/10">
       {!isNumberOnlyMode && (
         <td className="py-2 px-2 text-white text-sm align-top" style={{ width: '300px', minWidth: '300px', maxWidth: '300px' }}>
-          <span className="text-[#0084FF] font-mono mr-2">{paramKey}</span>
+          <span className="text-[#D97B54] font-mono mr-2">{paramKey}</span>
           {paramName}
           {typeHint && <span className="ml-1 text-xs text-[#646C89]">({typeHint})</span>}
         </td>
@@ -487,7 +546,7 @@ const TableRowInput = ({
       >
         <div className={isNumberOnlyMode ? 'flex items-start gap-3 w-full' : ''}>
           {isNumberOnlyMode && (
-            <span className="text-[#0084FF] font-mono text-sm shrink-0 pt-1">{paramKey}</span>
+            <span className="text-[#D97B54] font-mono text-sm shrink-0 pt-1">{paramKey}</span>
           )}
           <div ref={dropdownAnchorRef} className={isNumberOnlyMode ? 'relative flex-1 min-w-0' : 'relative'}>
           <textarea
@@ -506,7 +565,7 @@ const TableRowInput = ({
               resize-none
               ${showError
                 ? 'border-red-500 focus:border-red-500'
-                : 'border-[#646C89]/50 focus:border-[#0084FF]'
+                : 'border-[#646C89]/50 focus:border-[#D97B54]'
               }
             `}
             style={{ height: 'auto', minHeight: '28px', overflow: 'hidden', lineHeight: '1.4' }}
@@ -526,7 +585,7 @@ const TableRowInput = ({
             <button
               type="button"
               onClick={() => setIsOpen(!isOpen)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-[#646C89] hover:text-[#0084FF]"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[#646C89] hover:text-[#D97B54]"
             >
               <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
@@ -554,7 +613,7 @@ const TableRowInput = ({
                     setIsOpen(false);
                     setTouched(true);
                   }}
-                  className="w-full text-left px-3 py-1.5 text-white text-sm hover:bg-[#0084FF]/20 transition-colors"
+                  className="w-full text-left px-3 py-1.5 text-white text-sm hover:bg-[#D97B54]/20 transition-colors"
                 >
                   {option.label}
                 </button>
@@ -655,7 +714,7 @@ const InputWithSuggestions = ({ label, value, onChange, standardValues, loading,
               transition-colors
               ${showError
                 ? 'border-red-500 focus:border-red-500'
-                : 'border-[#646C89] focus:border-[#0084FF]'
+                : 'border-[#646C89] focus:border-[#D97B54]'
               }
             `}
           />
@@ -667,7 +726,7 @@ const InputWithSuggestions = ({ label, value, onChange, standardValues, loading,
             <button
               type="button"
               onClick={() => setIsOpen(!isOpen)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#646C89] hover:text-[#0084FF]"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#646C89] hover:text-[#D97B54]"
             >
               <ChevronDown size={18} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
@@ -701,7 +760,7 @@ const InputWithSuggestions = ({ label, value, onChange, standardValues, loading,
                   setIsOpen(false);
                   setTouched(true);
                 }}
-                className="w-full text-left px-4 py-2 text-white hover:bg-[#0084FF]/20 transition-colors"
+                className="w-full text-left px-4 py-2 text-white hover:bg-[#D97B54]/20 transition-colors"
               >
                 {val}
               </button>
@@ -791,6 +850,7 @@ const TechCardForm = () => {
   const [nextImageId, setNextImageId] = useState(1);
   const [standardValuesCache, setStandardValuesCache] = useState({});
   const [savingOptionKey, setSavingOptionKey] = useState(null);
+  const [activeTabId, setActiveTabId] = useState(DEFAULT_ACTIVE_TAB);
 
   const isRosatomMethodology = selectedMethodology === ROSATOM_METHODOLOGY_ID;
   const isGazpromMethodology = selectedMethodology === GAZPROM_METHODOLOGY_ID;
@@ -807,6 +867,7 @@ const TechCardForm = () => {
     setCustomFields({});
     setUploadedImages({});
     setStandardValuesCache({});
+    setActiveTabId(DEFAULT_ACTIVE_TAB);
   };
 
   const resetObjectSelection = () => {
@@ -827,12 +888,14 @@ const TechCardForm = () => {
   const applyLoadedTechCard = (data) => {
     const nextBlocks = data.blocks || [];
     const { values, selectedIds } = buildFormStateFromBlocks(nextBlocks);
+    const nextTabs = buildBlockTabs(nextBlocks);
 
     setBlocks(nextBlocks);
     setObjectType(data.type || null);
     setParamValues(values);
     setSelectedOptionIds(selectedIds);
     setStandardValuesCache(buildStandardValuesCacheFromBlocks(nextBlocks));
+    setActiveTabId(nextTabs[0]?.id || DEFAULT_ACTIVE_TAB);
   };
 
   // Обработчик загрузки изображения
@@ -973,6 +1036,21 @@ const TechCardForm = () => {
 
     loadObjectTypes();
   }, [selectedMethodology]);
+
+  useEffect(() => {
+    const availableTabs = buildBlockTabs(blocks);
+
+    if (availableTabs.length === 0) {
+      if (activeTabId !== DEFAULT_ACTIVE_TAB) {
+        setActiveTabId(DEFAULT_ACTIVE_TAB);
+      }
+      return;
+    }
+
+    if (!availableTabs.some((tab) => tab.id === activeTabId)) {
+      setActiveTabId(availableTabs[0].id);
+    }
+  }, [blocks, activeTabId]);
 
   const handleMethodologySelect = (option) => {
     setSelectedMethodology(option.id);
@@ -1488,6 +1566,9 @@ const TechCardForm = () => {
   const hasSelectedMethodology = Boolean(selectedMethodology);
   const hasSelectedObject = isGazpromMethodology ? true : objectInputValue.trim();
   const hasSelectedElement = isGazpromMethodology ? blocks.length > 0 : selectedElement && blocks.length > 0;
+  const blockTabs = buildBlockTabs(blocks);
+  const activeTab = blockTabs.find((tab) => tab.id === activeTabId) || blockTabs[0] || null;
+  const visibleBlocks = activeTab?.blocks || blocks;
 
   return (
     <div className="bg-[#21262F] rounded-2xl p-6 md:p-8">
@@ -1501,7 +1582,7 @@ const TechCardForm = () => {
           <>
             {/* Секция 1: Выбор методики */}
             <div className="bg-[#0C1515]/50 rounded-xl p-5">
-              <h3 className="text-[#0084FF] font-semibold mb-4">1. Методика</h3>
+              <h3 className="text-[#D97B54] font-semibold mb-4">1. Методика</h3>
               <ComboBoxField
                 label="Методика контроля"
                 value={selectedMethodology}
@@ -1518,7 +1599,7 @@ const TechCardForm = () => {
               <>
                 {/* Секция 2: Выбор объекта */}
                 <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity ${hasSelectedMethodology ? 'opacity-100' : 'opacity-50'}`}>
-                  <h3 className="text-[#0084FF] font-semibold mb-4">2. Объект контроля</h3>
+                  <h3 className="text-[#D97B54] font-semibold mb-4">2. Объект контроля</h3>
                   <ComboBoxField
                     label="Тип объекта"
                     value={selectedObject}
@@ -1534,7 +1615,7 @@ const TechCardForm = () => {
 
                 {/* Секция 3: Выбор элемента */}
                 <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity ${hasSelectedMethodology && hasSelectedObject ? 'opacity-100' : 'opacity-50'}`}>
-                  <h3 className="text-[#FFFB78] font-semibold mb-4">3. Элемент контроля</h3>
+                  <h3 className="text-[#8FB996] font-semibold mb-4">3. Элемент контроля</h3>
                   <ComboBoxField
                     label="Тип элемента"
                     value={selectedElement}
@@ -1554,7 +1635,7 @@ const TechCardForm = () => {
             {loadingBlocks && (
               <div className="bg-[#0C1515]/50 rounded-xl p-5">
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 size={32} className="animate-spin text-[#0084FF]" />
+                  <Loader2 size={32} className="animate-spin text-[#D97B54]" />
                   <span className="ml-3 text-[#646C89]">{isGazpromMethodology ? 'Загрузка техкарты...' : 'Загрузка параметров...'}</span>
                 </div>
               </div>
@@ -1563,12 +1644,12 @@ const TechCardForm = () => {
             {/* Подсказка */}
             {!loadingBlocks && !hasSelectedElement && (
               <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity ${hasSelectedMethodology && hasSelectedObject ? 'opacity-100' : 'opacity-50'}`}>
-                <h3 className="text-[#0084FF] font-semibold mb-4">4. Параметры</h3>
+                <h3 className="text-[#D97B54] font-semibold mb-4">4. Параметры</h3>
                 <p className="text-[#646C89] text-center py-4">
                   {!hasSelectedMethodology
                     ? 'Сначала выберите методику'
                     : isGazpromMethodology
-                      ? 'Методика «Газпром»: техкарта загружается сразу после выбора методики одним ответом.'
+                      ? 'Параметры техкарты появятся после загрузки данных.'
                       : hasSelectedObject
                       ? isGazpromMethodology
                         ? 'Выберите элемент контроля, чтобы сразу загрузить полную техкарту'
@@ -1605,23 +1686,51 @@ const TechCardForm = () => {
                   }
                   resetLoadedTechCard();
                 }}
-                className="text-[#0084FF] hover:text-[#0084FF]/80 text-sm transition-colors"
+                className="text-[#D97B54] hover:text-[#D97B54]/80 text-sm transition-colors"
               >
                 {isGazpromMethodology ? '← Изменить методику' : '← Изменить выбор'}
               </button>
             </div>
 
-            {isGazpromMethodology && (
-              <div className="bg-[#0C1515]/50 border border-[#FFFB78]/20 rounded-xl p-4 text-sm text-[#646C89]">
-                Методика «Газпром»: после выбора методики техкарта загружается целиком одним ответом, а варианты значений для полей берутся прямо из базы данных.
+            {/* Все динамические блоки от бэкенда */}
+            {blockTabs.length > 1 && (
+              <div className="mb-5 overflow-x-auto">
+                <div className="flex min-w-max gap-2 rounded-xl border border-[#646C89]/20 bg-[#0C1515]/60 p-2">
+                  {blockTabs.map((tab) => {
+                    const isActiveTab = tab.id === activeTab?.id;
+
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setActiveTabId(tab.id)}
+                        className={`min-w-[190px] rounded-lg border px-4 py-3 text-left transition-all ${isActiveTab ? 'shadow-sm' : 'opacity-80 hover:opacity-100'}`}
+                        style={{
+                          borderColor: isActiveTab ? 'var(--nk-accent-primary)' : 'rgba(138, 131, 119, 0.18)',
+                          backgroundColor: isActiveTab ? 'var(--nk-accent-primary-soft)' : 'rgba(12, 21, 21, 0.18)',
+                        }}
+                      >
+                        <div className="text-sm font-semibold" style={{ color: isActiveTab ? 'var(--nk-text-primary)' : 'var(--nk-text-secondary)' }}>
+                          {tab.label}
+                        </div>
+                        <div className="mt-1 text-xs" style={{ color: 'var(--nk-text-muted)' }}>
+                          {tab.description}
+                        </div>
+                        <div className="mt-3 text-[11px] uppercase tracking-[0.14em]" style={{ color: isActiveTab ? 'var(--nk-accent-secondary)' : 'var(--nk-text-muted)' }}>
+                          Разделов: {tab.blocks.length}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
-            {/* Все динамические блоки от бэкенда */}
-            {blocks.map((block, blockIndex) => {
+            {visibleBlocks.map((block, blockIndex) => {
               const isCollapsed = collapsedBlocks[block.id];
               const isComplete = isBlockComplete(block);
               const progress = getBlockProgress(block);
+              const blockTitlePrefix = Number.isFinite(Number(block.id)) ? block.id : blockIndex + 1;
               
               return (
               <div key={block.id} className="bg-[#0C1515]/50 rounded-xl p-5">
@@ -1637,8 +1746,8 @@ const TechCardForm = () => {
                     </span>
                     
                     {/* Заголовок */}
-                    <h3 className={`font-semibold ${blockIndex % 2 === 0 ? 'text-[#0084FF]' : 'text-[#FFFB78]'}`}>
-                      {blockIndex + 1}. {block.name}
+                    <h3 className={`font-semibold ${blockIndex % 2 === 0 ? 'text-[#D97B54]' : 'text-[#8FB996]'}`}>
+                      {blockTitlePrefix}. {block.name}
                     </h3>
                   </div>
                   
@@ -1689,7 +1798,7 @@ const TechCardForm = () => {
                                     <td colSpan={2} className="py-4 px-2">
                                       {!isFullImageMode && (
                                         <div className="text-white text-sm mb-2">
-                                        <span className="text-[#0084FF] font-mono mr-2">{compositeKey}</span>
+                                        <span className="text-[#D97B54] font-mono mr-2">{compositeKey}</span>
                                         {param.name}
                                         </div>
                                       )}
@@ -1742,14 +1851,14 @@ const TechCardForm = () => {
                                 value={field.name}
                                 onChange={(e) => updateCustomField(block.id, field.id, 'name', e.target.value)}
                                 placeholder="Название поля"
-                                className="flex-1 bg-[#0C1515] border border-[#646C89]/50 rounded px-3 py-1.5 text-white text-sm placeholder-[#646C89] focus:outline-none focus:border-[#0084FF]"
+                                className="flex-1 bg-[#0C1515] border border-[#646C89]/50 rounded px-3 py-1.5 text-white text-sm placeholder-[#646C89] focus:outline-none focus:border-[#D97B54]"
                               />
                               <input
                                 type="text"
                                 value={field.value}
                                 onChange={(e) => updateCustomField(block.id, field.id, 'value', e.target.value)}
                                 placeholder="Значение"
-                                className="flex-1 bg-[#0C1515] border border-[#646C89]/50 rounded px-3 py-1.5 text-white text-sm placeholder-[#646C89] focus:outline-none focus:border-[#0084FF]"
+                                className="flex-1 bg-[#0C1515] border border-[#646C89]/50 rounded px-3 py-1.5 text-white text-sm placeholder-[#646C89] focus:outline-none focus:border-[#D97B54]"
                               />
                               <button
                                 type="button"
@@ -1804,13 +1913,13 @@ const TechCardForm = () => {
                           e.stopPropagation();
                           addCustomField(block.id);
                         }}
-                        className="flex items-center gap-2 px-3 py-1.5 text-[#0084FF] hover:bg-[#0084FF]/10 rounded-lg transition-colors text-sm"
+                        className="flex items-center gap-2 px-3 py-1.5 text-[#D97B54] hover:bg-[#D97B54]/10 rounded-lg transition-colors text-sm"
                       >
                         <Plus size={16} />
                         Добавить поле
                       </button>
                       
-                      <label className="flex items-center gap-2 px-3 py-1.5 text-[#0084FF] hover:bg-[#0084FF]/10 rounded-lg transition-colors text-sm cursor-pointer">
+                      <label className="flex items-center gap-2 px-3 py-1.5 text-[#D97B54] hover:bg-[#D97B54]/10 rounded-lg transition-colors text-sm cursor-pointer">
                         <Image size={16} />
                         Добавить фото
                         <input
@@ -1841,7 +1950,7 @@ const TechCardForm = () => {
               py-4 rounded-xl font-semibold text-lg
               transition-all
               ${isFormValid() && !isSubmitting
-                ? 'bg-[#0084FF] hover:bg-[#0084FF]/80 text-white shadow-lg hover:shadow-[#0084FF]/20'
+                ? 'bg-[#D97B54] hover:bg-[#D97B54]/80 text-white shadow-lg hover:shadow-[#D97B54]/20'
                 : 'bg-[#646C89]/30 text-[#646C89] cursor-not-allowed'
               }
             `}
@@ -1865,3 +1974,4 @@ const TechCardForm = () => {
 };
 
 export default TechCardForm;
+

@@ -2,6 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --nk-bg: #121412;
+  --nk-surface: #1d211e;
+  --nk-text-primary: #d3ccbf;
+  --nk-text-secondary: #bbb2a3;
+  --nk-text-muted: #8c857a;
+  --nk-border: #5b5b56;
+  --nk-border-soft: rgba(91, 91, 86, 0.28);
+  --nk-accent-primary: #98785c;
+  --nk-accent-primary-strong: #83644b;
+  --nk-accent-primary-soft: rgba(152, 120, 92, 0.16);
+  --nk-accent-secondary: #7d876f;
+  --nk-shadow-primary: rgba(152, 120, 92, 0.18);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -9,11 +24,49 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: 'Tahoma', 'Verdana', 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background: var(--nk-bg);
+  color: var(--nk-text-primary);
+}
+
+.nk-app .text-white {
+  color: var(--nk-text-primary);
+}
+
+.nk-app [class*="text-[#646C89]"] {
+  color: var(--nk-text-muted);
+}
+
+.nk-app [class*="text-[#D97B54]"],
+.nk-app [class*="text-[#0084FF]"] {
+  color: var(--nk-accent-primary);
+}
+
+.nk-app [class*="text-[#8FB996]"],
+.nk-app [class*="text-[#FFFB78]"] {
+  color: var(--nk-accent-secondary);
+}
+
+.nk-app [class*="placeholder-[#646C89]"]::placeholder {
+  color: var(--nk-text-muted);
+  opacity: 1;
+}
+
+.nk-app [class~="bg-[#0084FF]"],
+.nk-app [class~="bg-[#D97B54]"] {
+  background-color: var(--nk-accent-primary);
+}
+
+.nk-app [class~="hover:bg-[#0084FF]/80"]:hover,
+.nk-app [class~="hover:bg-[#D97B54]/80"]:hover {
+  background-color: var(--nk-accent-primary-strong);
+}
+
+.nk-app [class*="shadow-[#0084FF]"],
+.nk-app [class*="shadow-[#D97B54]"] {
+  --tw-shadow-color: var(--nk-shadow-primary);
 }
 
 /* Стили для скроллбара */
@@ -22,14 +75,14 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0C1515;
+  background: var(--nk-bg);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #646C89;
+  background: var(--nk-border);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #0084FF;
+  background: var(--nk-accent-primary);
 }
