@@ -314,6 +314,63 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
 
         return parsed_value
 
+    def _is_empty_payload_value(self, value: Any) -> bool:
+        if value in (None, "", [], {}):
+            return True
+        if isinstance(value, str) and not value.strip():
+            return True
+        return False
+
+    def _parse_param_id_sort_key(self, param_id: Any) -> List[int]:
+        return [
+            int(part) if str(part).isdigit() else 0
+            for part in str(param_id).split(".")
+        ]
+
+    def _build_json_block_payload(
+        self,
+        source: TechCardData | Dict[int, Dict[str, Any]],
+        block_id: int,
+        block_prefix: str,
+    ) -> Dict[str, Any]:
+        block = source.params.get(block_id) if isinstance(source, TechCardData) else source.get(block_id)
+        if block is None and isinstance(source, TechCardData):
+            block = source.params.get(str(block_id))
+        elif block is None:
+            block = source.get(str(block_id))
+
+        if not isinstance(block, dict):
+            return {}
+
+        params = block.get("params", {})
+        if not isinstance(params, dict):
+            return {}
+
+        payload: Dict[str, Any] = {}
+        prefix = f"{block_prefix}."
+
+        for param_id in sorted(params.keys(), key=self._parse_param_id_sort_key):
+            param = params.get(param_id)
+            if not isinstance(param, dict):
+                continue
+
+            normalised_param_id = str(param_id).strip()
+            if not normalised_param_id:
+                continue
+
+            value = self._parse_json_payload(param.get("val"))
+            if self._is_empty_payload_value(value):
+                continue
+
+            full_key = (
+                normalised_param_id
+                if normalised_param_id.startswith(prefix)
+                else f"{block_prefix}.{normalised_param_id}"
+            )
+            payload[full_key] = value
+
+        return payload
+
     def _get_param(self, source: TechCardData | Dict[int, Dict[str, Any]], block_id: int, param_id: str) -> Dict[str, Any] | None:
         blocks = source.params if isinstance(source, TechCardData) else source
         block = blocks.get(block_id) or blocks.get(str(block_id))
@@ -1002,6 +1059,92 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
             self.conn.rollback()
             raise
 
+    def _find_existing_json_row(self, table_name: str, lookup_values: Dict[str, Any]) -> Dict[str, Any] | None:
+        where_clause, params = self._build_option_lookup_conditions(lookup_values)
+        if not where_clause:
+            return None
+
+        return self._fetch_one_row(
+            f"""
+            SELECT id
+            FROM {table_name}
+            WHERE {where_clause}
+            ORDER BY id
+            LIMIT 1
+            """,
+            tuple(params),
+        )
+
+    def _upsert_json_payload_row(
+        self,
+        table_name: str,
+        lookup_values: Dict[str, Any],
+        payload: Dict[str, Any],
+    ) -> None:
+        existing_row = self._find_existing_json_row(table_name, lookup_values)
+        if not payload and not existing_row:
+            return
+
+        serialised_payload = json.dumps(payload, ensure_ascii=False)
+
+        try:
+            if existing_row and existing_row.get("id") is not None:
+                self.cursor.execute(
+                    f"""
+                    UPDATE {table_name}
+                    SET parameters = %s::jsonb
+                    WHERE id = %s
+                    """,
+                    (serialised_payload, existing_row["id"]),
+                )
+            else:
+                insert_columns = list(lookup_values.keys()) + ["parameters"]
+                column_sql = ", ".join(f'"{column_name}"' for column_name in insert_columns)
+                placeholders = ", ".join(
+                    ["%s"] * len(lookup_values) + ["%s::jsonb"]
+                )
+                values = list(lookup_values.values()) + [serialised_payload]
+
+                self.cursor.execute(
+                    f"""
+                    INSERT INTO {table_name} ({column_sql})
+                    VALUES ({placeholders})
+                    """,
+                    tuple(values),
+                )
+
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
+
+    def _save_radiographic_decoding_block(self, source: TechCardData | Dict[int, Dict[str, Any]]) -> None:
+        designation_id = self._resolve_designation_id(source)
+        if designation_id is None:
+            return
+
+        payload = self._build_json_block_payload(source, 9, "9")
+        self._upsert_json_payload_row(
+            "radiographic_decoding_types",
+            {"designation_id": designation_id},
+            payload,
+        )
+
+    def _save_quality_assessment_block(self, source: TechCardData | Dict[int, Dict[str, Any]]) -> None:
+        designation_id = self._resolve_designation_id(source)
+        if designation_id is None:
+            return
+
+        payload = self._build_json_block_payload(source, 10, "10")
+        self._upsert_json_payload_row(
+            "quality_assessment_types",
+            {
+                "designation_id": designation_id,
+                "drawing_numbers_id": self._resolve_drawing_number_id(source),
+            },
+            payload,
+        )
+
     def create_param_option(self, payload: dict) -> dict:
         if not self._is_db_available():
             return {
@@ -1286,10 +1429,7 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
                 mapped_values[str(next_sequential_index)] = parsed_payload
                 next_sequential_index += 1
 
-        def parse_param_id(param_id: str) -> List[int]:
-            return [int(part) if part.isdigit() else 0 for part in str(param_id).split(".")]
-
-        for field_id in sorted(mapped_values.keys(), key=parse_param_id):
+        for field_id in sorted(mapped_values.keys(), key=self._parse_param_id_sort_key):
             value = mapped_values[field_id]
             if value in (None, ""):
                 continue
@@ -1348,10 +1488,7 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
                 mapped_values[str(next_sequential_index)] = parsed_payload
                 next_sequential_index += 1
 
-        def parse_param_id(param_id: str) -> List[int]:
-            return [int(part) if part.isdigit() else 0 for part in str(param_id).split(".")]
-
-        for field_id in sorted(mapped_values.keys(), key=parse_param_id):
+        for field_id in sorted(mapped_values.keys(), key=self._parse_param_id_sort_key):
             value = mapped_values[field_id]
             if value in (None, ""):
                 continue
@@ -1650,6 +1787,10 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         return self._create_card()
 
     def sync_tech_card(self, tech_card: TechCardData) -> TechCardData:
+        if self._is_db_available():
+            self._save_radiographic_decoding_block(tech_card)
+            self._save_quality_assessment_block(tech_card)
+
         selected_scheme_id = self._get_param_selected_id(tech_card, self.SCHEME_BLOCK_ID, self.SCHEME_PARAM_ID)
         selected_reference = self._get_param_value(tech_card, self.SCHEME_BLOCK_ID, self.SCHEME_PARAM_ID)
         self._fill_block_6(tech_card.params, tech_card, selected_reference, selected_scheme_id)
