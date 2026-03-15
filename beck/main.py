@@ -64,13 +64,27 @@ def createPipeLine() -> PipeLine:
 test = False
 
 
+# def main():
+#     repos = {
+#         TechCardService.ROSATOM_METHODOLOGY: PostgresDataBase(
+#             "host=localhost port=5432 dbname=techCard user=postgres password=admin"
+#         ),
+#         TechCardService.GAZPROM_METHODOLOGY: PostgreDbShablovGazprom(
+#             "host=localhost port=5432 dbname=welding_control_db user=postgres password=admin"
+#         ),
+#     }
+#     controller = ControllerWeb()
+#     service = TechCardService(repos, createPipeLine())
+#     controller.setServise(service)
+#     create_adapter(controller)
+
 def main():
     repos = {
         TechCardService.ROSATOM_METHODOLOGY: PostgresDataBase(
-            "host=localhost port=5432 dbname=techCard user=postgres password=admin"
+            "host=localhost port=5435 dbname=techCard user=postgres password=1"
         ),
         TechCardService.GAZPROM_METHODOLOGY: PostgreDbShablovGazprom(
-            "host=localhost port=5432 dbname=welding_control_db user=postgres password=admin"
+            "host=localhost port=5435 dbname=welding_control_db user=postgres password=1"
         ),
     }
     controller = ControllerWeb()
@@ -78,16 +92,5 @@ def main():
     controller.setServise(service)
     create_adapter(controller)
 
-
-def testF():
-    repo = PostgresDataBase("host=localhost port=5432 dbname=techcard user=postgres password=admin")
-    print(repo.get_all_possible_values_by_param_and_element(1, 2))
-    a = 0
-    a += 1
-
-
 if __name__ == "__main__":
-    if(test):
-        testF()
-    else:
         main()
