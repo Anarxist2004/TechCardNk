@@ -5,6 +5,187 @@ import { buildTechCardPayload, updateTechCard } from '../data/formConfig';
 
 const ROSATOM_METHODOLOGY_ID = '0';
 const GAZPROM_METHODOLOGY_ID = '1';
+const DISPLAY_MODE_NUMBER_ONLY = 'number_only';
+const DISPLAY_MODE_IMAGE_FULL = 'image_full';
+const GAZPROM_SCHEME_PARAM_KEY = '6.1';
+
+const normalizeSuggestionOptions = (options) => {
+  if (!Array.isArray(options)) {
+    return [];
+  }
+
+  return options.map((option) => {
+    if (typeof option === 'object' && option !== null) {
+      const label = option.name ?? option.label ?? option.value ?? '';
+      return {
+        id: option.id ?? null,
+        label: String(label),
+        value: String(label),
+      };
+    }
+
+    return {
+      id: null,
+      label: String(option),
+      value: String(option),
+    };
+  });
+};
+
+const normalizeOptionValues = (options) => {
+  if (!Array.isArray(options)) {
+    return [];
+  }
+
+  return options
+    .map((option) => {
+      if (typeof option === 'object' && option !== null) {
+        const label = option.name ?? option.label ?? option.value ?? '';
+        if (!label) {
+          return null;
+        }
+
+        return {
+          id: option.id ?? null,
+          name: String(label),
+        };
+      }
+
+      return String(option);
+    })
+    .filter(Boolean);
+};
+
+const isSelectedValueObject = (value) => (
+  typeof value === 'object'
+  && value !== null
+  && !Array.isArray(value)
+  && value.id !== undefined
+  && value.name !== undefined
+);
+
+const getInputValueFromParam = (param, fallbackValue = '') => {
+  const val = param?.value;
+
+  if (val === null || val === undefined) {
+    return fallbackValue;
+  }
+
+  if (Array.isArray(val)) {
+    return fallbackValue;
+  }
+
+  if (typeof val === 'object') {
+    if (val.name !== undefined) {
+      return String(val.name);
+    }
+    if (val.id !== undefined) {
+      return String(val.id);
+    }
+    return fallbackValue;
+  }
+
+  return String(val);
+};
+
+const getSelectedIdFromParam = (param) => {
+  if (param?.selectedId !== undefined && param?.selectedId !== null && param?.selectedId !== '') {
+    return String(param.selectedId);
+  }
+
+  const val = param?.value;
+  if (val && typeof val === 'object' && !Array.isArray(val) && val.id !== undefined) {
+    return String(val.id);
+  }
+
+  return null;
+};
+
+const resolveImageSrc = (imageSrc) => {
+  if (!imageSrc) {
+    return '';
+  }
+
+  const normalizedSrc = String(imageSrc).trim();
+
+  if (
+    normalizedSrc.startsWith('data:') ||
+    normalizedSrc.startsWith('http://') ||
+    normalizedSrc.startsWith('https://') ||
+    normalizedSrc.startsWith('blob:')
+  ) {
+    return normalizedSrc;
+  }
+
+  if (normalizedSrc.startsWith('/')) {
+    return normalizedSrc;
+  }
+
+  if (normalizedSrc.startsWith('res/')) {
+    return `/${normalizedSrc}`;
+  }
+
+  const looksLikeBase64 = (
+    !normalizedSrc.includes('/')
+    && !normalizedSrc.includes('\\')
+    && !normalizedSrc.includes(' ')
+    && /^[A-Za-z0-9+/=]+$/.test(normalizedSrc)
+    && normalizedSrc.length > 64
+  );
+
+  if (looksLikeBase64) {
+    return `data:image/png;base64,${normalizedSrc}`;
+  }
+
+  return normalizedSrc;
+};
+
+const buildFormStateFromBlocks = (blocks = []) => {
+  const values = {};
+  const selectedIds = {};
+
+  blocks.forEach((block) => {
+    block.params.forEach((param) => {
+      const compositeKey = `${block.id}.${param.id}`;
+      values[compositeKey] = getInputValueFromParam(param, '');
+
+      const selectedId = getSelectedIdFromParam(param);
+      if (selectedId !== null) {
+        selectedIds[compositeKey] = selectedId;
+      }
+    });
+  });
+
+  return { values, selectedIds };
+};
+
+const buildStandardValuesCacheFromBlocks = (blocks = []) => {
+  const cache = {};
+
+  blocks.forEach((block) => {
+    block.params.forEach((param) => {
+      const compositeKey = `${block.id}.${param.id}`;
+      const optionValues = normalizeOptionValues(param.options);
+      const val = param.value;
+
+      if (optionValues.length > 0) {
+        cache[compositeKey] = optionValues;
+        return;
+      }
+
+      if (Array.isArray(val) && val.length > 0) {
+        cache[compositeKey] = normalizeOptionValues(val);
+        return;
+      }
+
+      if (typeof val === 'object' && val !== null && !Array.isArray(val) && !isSelectedValueObject(val)) {
+        cache[compositeKey] = Object.values(val).map((item) => String(item));
+      }
+    });
+  });
+
+  return cache;
+};
 
 // Компонент поля с возможностью ввода И выбора из списка
 const ComboBoxField = ({ label, value, inputValue, options, onChange,
@@ -175,7 +356,7 @@ const getTypeHint = (typeData) => {
 };
 
 // Компонент строки таблицы с полем ввода
-const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, typeData }) => {
+const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, typeData, displayMode }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [touched, setTouched] = useState(false);
   const textareaRef = React.useRef(null);
@@ -183,6 +364,8 @@ const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, t
   const validation = validateByType(value, typeData);
   const showError = touched && !validation.isValid;
   const typeHint = getTypeHint(typeData);
+  const suggestionOptions = normalizeSuggestionOptions(standardValues);
+  const isNumberOnlyMode = displayMode === DISPLAY_MODE_NUMBER_ONLY;
 
   // Автоматическое подгонка textarea по высоте текста
   const adjustHeight = () => {
@@ -214,7 +397,7 @@ const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, t
       }
     }
 
-    onChange(newValue);
+    onChange(newValue, null);
   };
 
   const handleBlur = () => {
@@ -223,13 +406,23 @@ const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, t
 
   return (
     <tr className="border-b border-[#646C89]/20 hover:bg-[#646C89]/10">
-      <td className="py-2 px-2 text-white text-sm align-top" style={{ width: '300px', minWidth: '300px', maxWidth: '300px' }}>
-        <span className="text-[#0084FF] font-mono mr-2">{paramKey}</span>
-        {paramName}
-        {typeHint && <span className="ml-1 text-xs text-[#646C89]">({typeHint})</span>}
-      </td>
-      <td className="py-2 px-2 relative align-top" style={{ width: '400px', minWidth: '400px' }}>
-        <div className="relative">
+      {!isNumberOnlyMode && (
+        <td className="py-2 px-2 text-white text-sm align-top" style={{ width: '300px', minWidth: '300px', maxWidth: '300px' }}>
+          <span className="text-[#0084FF] font-mono mr-2">{paramKey}</span>
+          {paramName}
+          {typeHint && <span className="ml-1 text-xs text-[#646C89]">({typeHint})</span>}
+        </td>
+      )}
+      <td
+        colSpan={isNumberOnlyMode ? 2 : undefined}
+        className="py-2 px-2 align-top"
+        style={isNumberOnlyMode ? undefined : { width: '400px', minWidth: '400px' }}
+      >
+        <div className={isNumberOnlyMode ? 'flex items-start gap-3 w-full' : ''}>
+          {isNumberOnlyMode && (
+            <span className="text-[#0084FF] font-mono text-sm shrink-0 pt-1">{paramKey}</span>
+          )}
+          <div className={isNumberOnlyMode ? 'relative flex-1 min-w-0' : 'relative'}>
           <textarea
             ref={textareaRef}
             value={value}
@@ -251,7 +444,7 @@ const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, t
             `}
             style={{ height: 'auto', minHeight: '28px', overflow: 'hidden', lineHeight: '1.4' }}
           />
-          {standardValues && standardValues.length > 0 && (
+          {suggestionOptions.length > 0 && (
             <button
               type="button"
               onClick={() => setIsOpen(!isOpen)}
@@ -260,36 +453,36 @@ const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, t
               <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
           )}
-        </div>
-        
         {showError && (
           <span className="text-xs text-red-500 mt-0.5 block">{validation.error}</span>
         )}
 
-        {isOpen && standardValues && standardValues.length > 0 && (
+        {isOpen && suggestionOptions.length > 0 && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
             <div className="absolute top-full right-0 w-56 mt-1 bg-[#0C1515] border border-[#646C89] rounded-lg shadow-lg z-50 max-h-40 overflow-y-auto">
               <div className="p-2 border-b border-[#646C89]/30">
                 <span className="text-xs text-[#646C89]">Стандартные значения:</span>
               </div>
-              {standardValues.map((val, idx) => (
+              {suggestionOptions.map((option, idx) => (
                 <button
-                  key={idx}
+                  key={`${option.id ?? option.value}_${idx}`}
                   type="button"
                   onClick={() => {
-                    onChange(val.toString());
+                    onChange(option.value, option.id);
                     setIsOpen(false);
                     setTouched(true);
                   }}
                   className="w-full text-left px-3 py-1.5 text-white text-sm hover:bg-[#0084FF]/20 transition-colors"
                 >
-                  {val}
+                  {option.label}
                 </button>
               ))}
             </div>
           </>
         )}
+          </div>
+        </div>
       </td>
     </tr>
   );
@@ -435,6 +628,7 @@ const TechCardForm = () => {
 
   // Значения параметров { paramId: value }
   const [paramValues, setParamValues] = useState({});
+  const [selectedOptionIds, setSelectedOptionIds] = useState({});
 
   // Поля, которые пользователь редактировал вручную (не перезаписываются бэкендом)
   const [userEditedFields, setUserEditedFields] = useState({});
@@ -492,6 +686,7 @@ const TechCardForm = () => {
     setElementInputValue('');
     setBlocks([]);
     setParamValues({});
+    setSelectedOptionIds({});
     setObjectType(null);
     setUserEditedFields({});
     setCollapsedBlocks({});
@@ -516,41 +711,14 @@ const TechCardForm = () => {
   };
 
   const applyLoadedTechCard = (data) => {
-    setBlocks(data.blocks || []);
+    const nextBlocks = data.blocks || [];
+    const { values, selectedIds } = buildFormStateFromBlocks(nextBlocks);
+
+    setBlocks(nextBlocks);
     setObjectType(data.type || null);
-
-    const initialValues = {};
-    (data.blocks || []).forEach(block => {
-      block.params.forEach(param => {
-        const compositeKey = `${block.id}.${param.id}`;
-        const val = param.value;
-
-        if (val === null || val === undefined) {
-          initialValues[compositeKey] = '';
-          return;
-        }
-
-        if (Array.isArray(val)) {
-          initialValues[compositeKey] = '';
-          return;
-        }
-
-        if (typeof val === 'object' && val !== null) {
-          if (val.name !== undefined) {
-            initialValues[compositeKey] = String(val.name);
-          } else if (val.id !== undefined) {
-            initialValues[compositeKey] = String(val.id);
-          } else {
-            initialValues[compositeKey] = '';
-          }
-          return;
-        }
-
-        initialValues[compositeKey] = String(val);
-      });
-    });
-
-    setParamValues(initialValues);
+    setParamValues(values);
+    setSelectedOptionIds(selectedIds);
+    setStandardValuesCache(buildStandardValuesCacheFromBlocks(nextBlocks));
   };
 
   // Обработчик загрузки изображения
@@ -664,6 +832,8 @@ const TechCardForm = () => {
           console.error('Ошибка загрузки полной техкарты Газпром:', error);
           setBlocks([]);
           setParamValues({});
+          setSelectedOptionIds({});
+          setStandardValuesCache({});
           setObjectType(null);
         } finally {
           setLoadingBlocks(false);
@@ -781,6 +951,8 @@ const TechCardForm = () => {
     if (!selectedMethodology || !selectedElement) {
       setBlocks([]);
       setParamValues({});
+      setSelectedOptionIds({});
+      setStandardValuesCache({});
       setObjectType(null);
       return;
     }
@@ -796,6 +968,8 @@ const TechCardForm = () => {
         console.error('Ошибка загрузки данных элемента:', error);
         setBlocks([]);
         setParamValues({});
+        setSelectedOptionIds({});
+        setStandardValuesCache({});
       } finally {
         setLoadingBlocks(false);
       }
@@ -803,27 +977,23 @@ const TechCardForm = () => {
     loadElementData();
   }, [selectedMethodology, selectedElement]);
 
-  const normalizeOptionValues = (options) => {
-    if (!Array.isArray(options)) {
-      return [];
-    }
-
-    return options.map((option) => {
-      if (typeof option === 'object' && option !== null && option.name !== undefined) {
-        return String(option.name);
-      }
-      return String(option);
-    });
-  };
-
   // Обработчик изменения значения параметра
-  const handleParamChange = async (compositeKey, value) => {
+  const handleParamChange = async (compositeKey, value, selectedOptionId = null) => {
     // Обновляем локальное состояние
     const updatedValues = {
       ...paramValues,
       [compositeKey]: value
     };
+    const updatedSelectedOptionIds = { ...selectedOptionIds };
+
+    if (selectedOptionId !== null && selectedOptionId !== undefined && selectedOptionId !== '') {
+      updatedSelectedOptionIds[compositeKey] = String(selectedOptionId);
+    } else {
+      delete updatedSelectedOptionIds[compositeKey];
+    }
+
     setParamValues(updatedValues);
+    setSelectedOptionIds(updatedSelectedOptionIds);
 
     // Помечаем поле как отредактированное пользователем
     setUserEditedFields(prev => ({
@@ -831,14 +1001,29 @@ const TechCardForm = () => {
       [compositeKey]: true
     }));
 
-    if (!isRosatomMethodology) {
+    const shouldSyncRosatom = isRosatomMethodology;
+    const shouldSyncGazpromScheme = (
+      isGazpromMethodology
+      && compositeKey === GAZPROM_SCHEME_PARAM_KEY
+      && selectedOptionId !== null
+      && selectedOptionId !== undefined
+      && selectedOptionId !== ''
+    );
+
+    if (!shouldSyncRosatom && !shouldSyncGazpromScheme) {
       return;
     }
 
     // Отправляем обновлённые данные на бэкенд
     try {
       // Формируем payload для бэкенда
-      const techCardPayload = buildTechCardPayload(objectType, selectedMethodology, blocks, updatedValues);
+      const techCardPayload = buildTechCardPayload(
+        objectType,
+        selectedMethodology,
+        blocks,
+        updatedValues,
+        updatedSelectedOptionIds
+      );
       
       console.log('Отправка изменения на бэкенд:', compositeKey, '=', value);
       console.log('Payload:', JSON.stringify(techCardPayload, null, 2));
@@ -850,7 +1035,9 @@ const TechCardForm = () => {
       
       // Если бэкенд вернул обновлённые блоки, обновляем их
       if (result.blocks && result.blocks.length > 0) {
-        setBlocks(result.blocks);
+        applyLoadedTechCard(result);
+        return;
+        /* setBlocks(result.blocks);
         
         // Обновляем кэш стандартных значений из ответа бэкенда
         const newCache = { ...standardValuesCache };
@@ -904,7 +1091,7 @@ const TechCardForm = () => {
             }
           });
         });
-        setParamValues(newValues);
+        setParamValues(newValues); */
       }
     } catch (error) {
       console.error('Ошибка при обновлении параметра:', error);
@@ -913,7 +1100,9 @@ const TechCardForm = () => {
 
   // Сохраняем стандартные значения при загрузке блоков
   useEffect(() => {
-    if (blocks.length > 0) {
+    setStandardValuesCache(buildStandardValuesCacheFromBlocks(blocks));
+    return;
+    /* if (blocks.length > 0) {
       const cache = { ...standardValuesCache };
       blocks.forEach(block => {
         block.params.forEach(param => {
@@ -935,8 +1124,7 @@ const TechCardForm = () => {
           }
         });
       });
-      setStandardValuesCache(cache);
-    }
+      setStandardValuesCache(cache); */
   }, [blocks]);
 
   // Получение стандартных значений для параметра (из кэша или из param.value)
@@ -954,6 +1142,14 @@ const TechCardForm = () => {
     }
     
     const val = param.value;
+
+    if (Array.isArray(val)) {
+      return normalizeOptionValues(val);
+    }
+
+    if (typeof val === 'object' && val !== null && !Array.isArray(val) && isSelectedValueObject(val)) {
+      return [];
+    }
     
     // Если value - массив, это стандартные значения
     if (Array.isArray(val)) {
@@ -1013,7 +1209,13 @@ const TechCardForm = () => {
     
     try {
       // Формируем payload для бэкенда
-      const techCardPayload = buildTechCardPayload(objectType, selectedMethodology, blocks, paramValues);
+      const techCardPayload = buildTechCardPayload(
+        objectType,
+        selectedMethodology,
+        blocks,
+        paramValues,
+        selectedOptionIds
+      );
 
       console.log('═══════════════════════════════════════════════════');
       console.log('        ОТПРАВКА НА БЭКЕНД');
@@ -1031,7 +1233,10 @@ const TechCardForm = () => {
 
       // Обновляем блоки с результатом от PipeLine
       if (result.blocks && result.blocks.length > 0) {
-        setBlocks(result.blocks);
+        applyLoadedTechCard(result);
+        alert('РљР°СЂС‚Р° СѓСЃРїРµС€РЅРѕ РѕР±СЂР°Р±РѕС‚Р°РЅР°!');
+        return;
+        /* setBlocks(result.blocks);
         
         // Обновляем значения параметров с составным ключом
         const newValues = {};
@@ -1047,7 +1252,7 @@ const TechCardForm = () => {
             }
           });
         });
-        setParamValues(newValues);
+        setParamValues(newValues); */
       }
 
       alert('Карта успешно обработана!');
@@ -1271,10 +1476,11 @@ const TechCardForm = () => {
                               
                               // Если параметр содержит изображение
                               if (param.image || (param.value && typeof param.value === 'object' && param.value.image)) {
-                                let imageSrc = param.image || param.value.image;
+                                let imageSrc = resolveImageSrc(param.image || param.value.image);
+                                const isFullImageMode = param.displayMode === DISPLAY_MODE_IMAGE_FULL;
                                 
                                 // Если это base64 без префикса data:image, добавляем его
-                                if (imageSrc && !imageSrc.startsWith('data:') && !imageSrc.startsWith('http')) {
+                                if (imageSrc && !imageSrc.startsWith('data:') && !imageSrc.startsWith('http') && !imageSrc.startsWith('blob:') && !imageSrc.startsWith('/')) {
                                   // Определяем тип изображения (по умолчанию png)
                                   imageSrc = `data:image/png;base64,${imageSrc}`;
                                 }
@@ -1282,15 +1488,19 @@ const TechCardForm = () => {
                                 return (
                                   <tr key={compositeKey} className="border-b border-[#646C89]/20">
                                     <td colSpan={2} className="py-4 px-2">
-                                      <div className="text-white text-sm mb-2">
+                                      {!isFullImageMode && (
+                                        <div className="text-white text-sm mb-2">
                                         <span className="text-[#0084FF] font-mono mr-2">{compositeKey}</span>
                                         {param.name}
-                                      </div>
+                                        </div>
+                                      )}
                                       <div className="flex justify-center">
                                         <img 
                                           src={imageSrc} 
                                           alt={param.name}
-                                          className="max-w-full max-h-96 rounded-lg border border-[#646C89]/30"
+                                          className={`rounded-lg border border-[#646C89]/30 ${
+                                            isFullImageMode ? 'w-full max-w-4xl object-contain' : 'max-w-full max-h-96'
+                                          }`}
                                         />
                                       </div>
                                     </td>
@@ -1304,9 +1514,10 @@ const TechCardForm = () => {
                                   paramKey={compositeKey}
                                   paramName={param.name}
                                   value={paramValues[compositeKey] || ''}
-                                  onChange={(val) => handleParamChange(compositeKey, val)}
+                                  onChange={(val, selectedId) => handleParamChange(compositeKey, val, selectedId)}
                                   standardValues={getStandardValuesForParam(param, block.id)}
                                   typeData={getParamTypeData(param)}
+                                  displayMode={param.displayMode}
                                 />
                               );
                             })}

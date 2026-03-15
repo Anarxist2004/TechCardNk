@@ -168,7 +168,7 @@ export const updateTechCard = async (techCardData) => {
  * @param {Array} blocks - массив блоков с параметрами
  * @param {object} paramValues - значения параметров { compositeKey: value } где compositeKey = blockId.paramId
  */
-export const buildTechCardPayload = (type, methodology, blocks, paramValues) => {
+export const buildTechCardPayload = (type, methodology, blocks, paramValues, selectedOptionIds = {}) => {
   const params = {};
 
   blocks.forEach(block => {
@@ -181,6 +181,7 @@ export const buildTechCardPayload = (type, methodology, blocks, paramValues) => 
       // Используем составной ключ для получения значения
       const compositeKey = `${block.id}.${param.id}`;
       const value = paramValues[compositeKey];
+      const selectedId = selectedOptionIds[compositeKey];
       
       params[block.id].params[param.id] = {
         name: param.name,
@@ -189,6 +190,10 @@ export const buildTechCardPayload = (type, methodology, blocks, paramValues) => 
         typeData: param.typeData || 'string',
         displayMode: param.displayMode || null
       };
+
+      if (selectedId !== undefined && selectedId !== null && selectedId !== '') {
+        params[block.id].params[param.id].selectedId = String(selectedId);
+      }
     });
   });
 

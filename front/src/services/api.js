@@ -114,6 +114,7 @@ function transformBlocksResponse(data) {
           options: Array.isArray(param.options) ? param.options : [],
           typeData: param.typeData || 'string',
           displayMode: param.displayMode || null,
+          selectedId: param.selectedId ?? null,
           image: param.image || null,
           blockId: blockId,
           blockName: block.name
@@ -195,6 +196,8 @@ function extractParamsFromBlocks(blocksData) {
         typeData: typeData,
         value: param.value,
         options: param.options || [],
+        selectedId: param.selectedId ?? null,
+        displayMode: param.displayMode || null,
         blockId: param.blockId,
         blockName: param.blockName
       });

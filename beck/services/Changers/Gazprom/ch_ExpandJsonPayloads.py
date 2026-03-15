@@ -25,12 +25,18 @@ class ExpandJsonPayloads(IDataChanger):
             for _, param in params.items():
                 param_name = param.get("name")
                 param_value = param.get("val")
+                param_meta = {
+                    key: value
+                    for key, value in param.items()
+                    if key not in {"name", "val"}
+                }
 
                 if isinstance(param_value, (dict, list)):
                     base_id = next_id
                     expanded_params[base_id] = {
                         "name": param_name,
                         "val": "См. подпункты",
+                        **param_meta,
                     }
                     next_id += 1
 
@@ -38,12 +44,14 @@ class ExpandJsonPayloads(IDataChanger):
                         expanded_params[f"{base_id}.{suffix}"] = {
                             "name": nested_name,
                             "val": nested_value,
+                            **param_meta,
                         }
                     continue
 
                 expanded_params[next_id] = {
                     "name": param_name,
                     "val": param_value,
+                    **param_meta,
                 }
                 next_id += 1
 

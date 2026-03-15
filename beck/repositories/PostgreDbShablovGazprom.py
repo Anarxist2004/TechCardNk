@@ -9,6 +9,7 @@ from services.tech_card import TechCardData
 class PostgreDbShablovGazprom(PostgreDbShablov):
     GAZPROM_METHODOLOGY = 1
     DISPLAY_MODE_NUMBER_ONLY = "number_only"
+    DISPLAY_MODE_IMAGE_FULL = "image_full"
     RES_DIR = Path(__file__).resolve().parent.parent / "res"
 
     BLOCK_LAYOUT: Dict[int, Dict[str, Any]] = {
@@ -245,6 +246,22 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
             return ""
         return str(param.get("val") or "").strip()
 
+    def _get_param_selected_id(self, source: TechCardData | Dict[int, Dict[str, Any]], block_id: int, param_id: str) -> int | None:
+        param = self._get_param(source, block_id, param_id)
+        if not isinstance(param, dict):
+            return None
+
+        selected_id = param.get("selectedId")
+        if selected_id in (None, ""):
+            value = param.get("val")
+            if isinstance(value, dict):
+                selected_id = value.get("id")
+
+        try:
+            return int(selected_id) if selected_id not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
     def _resolve_welded_joint_type_id(self, source: TechCardData | Dict[int, Dict[str, Any]]) -> int | None:
         joint_type_name = (
             self._get_param_value(source, 4, "1")
@@ -411,6 +428,34 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
 
         return self._fetch_all_rows(query, tuple(params))
 
+    def _get_quality_assessment_rows(self, designation_id: Any, drawing_number_id: Any) -> List[Dict[str, Any]]:
+        if not designation_id:
+            return []
+
+        if drawing_number_id:
+            return self._fetch_all_rows(
+                """
+                SELECT parameters
+                FROM quality_assessment_types
+                WHERE designation_id = %s
+                  AND (drawing_numbers_id = %s OR drawing_numbers_id IS NULL)
+                ORDER BY
+                    CASE WHEN drawing_numbers_id = %s THEN 0 ELSE 1 END,
+                    id
+                """,
+                (designation_id, drawing_number_id, drawing_number_id),
+            )
+
+        return self._fetch_all_rows(
+            """
+            SELECT parameters
+            FROM quality_assessment_types
+            WHERE designation_id = %s
+            ORDER BY id
+            """,
+            (designation_id,),
+        )
+
     def _get_existing_column_name(self, table_name: str, column_candidates: List[str]) -> str | None:
         if not column_candidates:
             return None
@@ -540,16 +585,33 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         blocks: Dict[int, Dict[str, Any]],
         source: TechCardData | Dict[int, Dict[str, Any]],
         selected_reference: str | None = None,
+        selected_scheme_id: int | None = None,
     ) -> None:
         block = self._ensure_block(blocks, self.SCHEME_BLOCK_ID)
         block["name"] = self.BLOCK_LAYOUT[self.SCHEME_BLOCK_ID]["name"]
         block["params"] = {}
 
         scheme_rows = self._get_transmission_scheme_rows(source)
-        scheme_options = [str(row.get("reference")) for row in scheme_rows if row.get("reference")]
+        scheme_options = [
+            {
+                "id": str(row.get("id")),
+                "name": str(row.get("reference")),
+            }
+            for row in scheme_rows
+            if row.get("id") is not None and row.get("reference")
+        ]
 
         selected_row = None
-        if selected_reference:
+        if selected_scheme_id is not None:
+            selected_row = next(
+                (
+                    row
+                    for row in scheme_rows
+                    if row.get("id") is not None and int(row.get("id")) == selected_scheme_id
+                ),
+                None,
+            )
+        if selected_row is None and selected_reference:
             selected_row = next(
                 (row for row in scheme_rows if str(row.get("reference") or "") == selected_reference),
                 None,
@@ -565,6 +627,7 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
             "Схема просвечивания",
             selected_value,
             options=scheme_options,
+            selected_id=selected_row.get("id") if selected_row else None,
         )
 
         if selected_row and selected_row.get("id") is not None:
@@ -576,6 +639,7 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
                     "1.1",
                     "Схема просвечивания",
                     image=image_path,
+                    display_mode=self.DISPLAY_MODE_IMAGE_FULL,
                 )
             self._apply_scheme_params(blocks, int(selected_row["id"]))
 
@@ -596,10 +660,11 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         param_id: str,
         name: str,
         value: Any = "",
-        options: List[str] | None = None,
+        options: List[Any] | None = None,
         type_data: str | None = None,
         image: Any = None,
         display_mode: str | None = None,
+        selected_id: Any = None,
     ) -> None:
         block = self._ensure_block(blocks, block_id)
         existing = block["params"].get(str(param_id), {})
@@ -608,6 +673,7 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
             or existing.get("displayMode")
             or self._get_default_display_mode(block_id, str(param_id))
         )
+        resolved_selected_id = existing.get("selectedId") if selected_id is None else selected_id
         block["params"][str(param_id)] = {
             "name": name,
             "val": self._normalise_value(value),
@@ -616,6 +682,8 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         }
         if resolved_display_mode:
             block["params"][str(param_id)]["displayMode"] = resolved_display_mode
+        if resolved_selected_id not in (None, ""):
+            block["params"][str(param_id)]["selectedId"] = str(resolved_selected_id)
         if image is not None:
             block["params"][str(param_id)]["image"] = image
         elif "image" in existing:
@@ -858,8 +926,9 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         blocks: Dict[int, Dict[str, Any]],
         source: TechCardData | Dict[int, Dict[str, Any]],
         selected_reference: str | None = None,
+        selected_scheme_id: int | None = None,
     ) -> None:
-        self._apply_scheme_to_blocks(blocks, source, selected_reference)
+        self._apply_scheme_to_blocks(blocks, source, selected_reference, selected_scheme_id)
 
     def _fill_block_7(self, blocks: Dict[int, Dict[str, Any]], preparation_row: Dict[str, Any] | None) -> None:
         self._set_param(blocks, 7, "1", "Требования к качеству поверхности", preparation_row.get("surface_quality_requirement_name") if preparation_row else "")
@@ -890,7 +959,7 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         self._set_param(blocks, 8, "4.5.2", "Время проявления при танковой фотообработке, мин", control_term_row.get("development_time_name") if control_term_row else "")
 
     def _fill_block_9(self, blocks: Dict[int, Dict[str, Any]], decoding_rows: List[Dict[str, Any]]) -> None:
-        values = [self._summarise_json(row.get("parameters")) for row in decoding_rows if row.get("parameters") is not None]
+        values = [row.get("parameters") for row in decoding_rows if row.get("parameters") is not None]
         field_ids = ["1", "2", "3", "4"]
         for index, field_id in enumerate(field_ids):
             if index >= len(values):
@@ -908,7 +977,7 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         quality_rows: List[Dict[str, Any]],
         permissible_rows: List[Dict[str, Any]],
     ) -> None:
-        quality_values = [self._summarise_json(row.get("parameters")) for row in quality_rows if row.get("parameters") is not None]
+        quality_values = [row.get("parameters") for row in quality_rows if row.get("parameters") is not None]
         permissible_codes = "; ".join(str(row.get("standard_code")) for row in permissible_rows if row.get("standard_code"))
         permissible_params = "; ".join(
             self._summarise_json(row.get("parameters"))
@@ -1111,29 +1180,7 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
             (designation_id,),
         ) if designation_id else []
 
-        if designation_id and drawing_number_id:
-            quality_rows = self._fetch_all_rows(
-                """
-                SELECT parameters
-                FROM quality_assessment_types
-                WHERE designation_id = %s
-                  AND drawing_numbers_id = %s
-                ORDER BY id
-                """,
-                (designation_id, drawing_number_id),
-            )
-        elif designation_id:
-            quality_rows = self._fetch_all_rows(
-                """
-                SELECT parameters
-                FROM quality_assessment_types
-                WHERE designation_id = %s
-                ORDER BY id
-                """,
-                (designation_id,),
-            )
-        else:
-            quality_rows = []
+        quality_rows = self._get_quality_assessment_rows(designation_id, drawing_number_id)
 
         permissible_rows = self._fetch_all_rows(
             """
@@ -1231,8 +1278,9 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         return self._create_card()
 
     def sync_tech_card(self, tech_card: TechCardData) -> TechCardData:
+        selected_scheme_id = self._get_param_selected_id(tech_card, self.SCHEME_BLOCK_ID, self.SCHEME_PARAM_ID)
         selected_reference = self._get_param_value(tech_card, self.SCHEME_BLOCK_ID, self.SCHEME_PARAM_ID)
-        self._fill_block_6(tech_card.params, tech_card, selected_reference)
+        self._fill_block_6(tech_card.params, tech_card, selected_reference, selected_scheme_id)
         return tech_card
 
     def get_params_for_element(self, element_id: int) -> TechCardData:
