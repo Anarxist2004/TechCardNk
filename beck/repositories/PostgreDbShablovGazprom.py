@@ -230,6 +230,26 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
             return value
         return json.dumps(value, ensure_ascii=False)
 
+    def _parse_json_payload(self, value: Any) -> Any:
+        parsed_value = value
+
+        for _ in range(3):
+            if parsed_value in (None, "", [], {}):
+                return parsed_value
+
+            if isinstance(parsed_value, (dict, list)):
+                return parsed_value
+
+            if not isinstance(parsed_value, str):
+                return parsed_value
+
+            try:
+                parsed_value = json.loads(parsed_value)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                return value
+
+        return parsed_value
+
     def _get_param(self, source: TechCardData | Dict[int, Dict[str, Any]], block_id: int, param_id: str) -> Dict[str, Any] | None:
         blocks = source.params if isinstance(source, TechCardData) else source
         block = blocks.get(block_id) or blocks.get(str(block_id))
@@ -959,17 +979,59 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         self._set_param(blocks, 8, "4.5.2", "Время проявления при танковой фотообработке, мин", control_term_row.get("development_time_name") if control_term_row else "")
 
     def _fill_block_9(self, blocks: Dict[int, Dict[str, Any]], decoding_rows: List[Dict[str, Any]]) -> None:
-        values = [row.get("parameters") for row in decoding_rows if row.get("parameters") is not None]
-        field_ids = ["1", "2", "3", "4"]
-        for index, field_id in enumerate(field_ids):
-            if index >= len(values):
-                break
-            field_name = next(
-                field["name"]
-                for field in self.BLOCK_LAYOUT[9]["fields"]
-                if field["id"] == field_id
+        block = self._ensure_block(blocks, 9)
+        block["name"] = self.BLOCK_LAYOUT[9]["name"]
+        block["params"] = {}
+
+        field_names = {
+            str(field["id"]): field["name"]
+            for field in self.BLOCK_LAYOUT[9]["fields"]
+        }
+        mapped_values: Dict[str, Any] = {}
+        next_sequential_index = 1
+
+        for row in decoding_rows:
+            parsed_payload = self._parse_json_payload(row.get("parameters"))
+
+            if isinstance(parsed_payload, dict):
+                for raw_key, raw_value in parsed_payload.items():
+                    key = str(raw_key).strip()
+                    if key.startswith("9."):
+                        key = key.split(".", 1)[1]
+                    if key:
+                        mapped_values[key] = raw_value
+                continue
+
+            if isinstance(parsed_payload, list):
+                for raw_value in parsed_payload:
+                    while str(next_sequential_index) in mapped_values:
+                        next_sequential_index += 1
+                    mapped_values[str(next_sequential_index)] = raw_value
+                    next_sequential_index += 1
+                continue
+
+            if parsed_payload not in (None, ""):
+                while str(next_sequential_index) in mapped_values:
+                    next_sequential_index += 1
+                mapped_values[str(next_sequential_index)] = parsed_payload
+                next_sequential_index += 1
+
+        def parse_param_id(param_id: str) -> List[int]:
+            return [int(part) if part.isdigit() else 0 for part in str(param_id).split(".")]
+
+        for field_id in sorted(mapped_values.keys(), key=parse_param_id):
+            value = mapped_values[field_id]
+            if value in (None, ""):
+                continue
+
+            self._set_param(
+                blocks,
+                9,
+                field_id,
+                field_names.get(field_id, f"Пункт {field_id}"),
+                value,
+                display_mode=self.DISPLAY_MODE_NUMBER_ONLY,
             )
-            self._set_param(blocks, 9, field_id, field_name, values[index])
 
     def _fill_block_10(
         self,
@@ -977,21 +1039,61 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         quality_rows: List[Dict[str, Any]],
         permissible_rows: List[Dict[str, Any]],
     ) -> None:
-        quality_values = [row.get("parameters") for row in quality_rows if row.get("parameters") is not None]
-        permissible_codes = "; ".join(str(row.get("standard_code")) for row in permissible_rows if row.get("standard_code"))
-        permissible_params = "; ".join(
-            self._summarise_json(row.get("parameters"))
-            for row in permissible_rows
-            if row.get("parameters") is not None
-        )
+        _ = permissible_rows
 
-        self._set_param(blocks, 10, "1", self.BLOCK_LAYOUT[10]["fields"][0]["name"], quality_values[0] if len(quality_values) > 0 else "")
-        self._set_param(blocks, 10, "2", self.BLOCK_LAYOUT[10]["fields"][1]["name"], permissible_codes)
-        self._set_param(blocks, 10, "3", self.BLOCK_LAYOUT[10]["fields"][2]["name"], quality_values[1] if len(quality_values) > 1 else "")
-        self._set_param(blocks, 10, "4", self.BLOCK_LAYOUT[10]["fields"][3]["name"], quality_values[2] if len(quality_values) > 2 else "")
-        self._set_param(blocks, 10, "5", self.BLOCK_LAYOUT[10]["fields"][4]["name"], quality_values[3] if len(quality_values) > 3 else "")
-        self._set_param(blocks, 10, "6", self.BLOCK_LAYOUT[10]["fields"][5]["name"], permissible_params)
-        self._set_param(blocks, 10, "7", self.BLOCK_LAYOUT[10]["fields"][6]["name"], quality_values[4] if len(quality_values) > 4 else "")
+        block = self._ensure_block(blocks, 10)
+        block["name"] = self.BLOCK_LAYOUT[10]["name"]
+        block["params"] = {}
+
+        field_names = {
+            str(field["id"]): field["name"]
+            for field in self.BLOCK_LAYOUT[10]["fields"]
+        }
+        mapped_values: Dict[str, Any] = {}
+        next_sequential_index = 1
+
+        for row in quality_rows:
+            parsed_payload = self._parse_json_payload(row.get("parameters"))
+
+            if isinstance(parsed_payload, dict):
+                for raw_key, raw_value in parsed_payload.items():
+                    key = str(raw_key).strip()
+                    if key.startswith("10."):
+                        key = key.split(".", 1)[1]
+                    if key:
+                        mapped_values[key] = raw_value
+                continue
+
+            if isinstance(parsed_payload, list):
+                for raw_value in parsed_payload:
+                    while str(next_sequential_index) in mapped_values:
+                        next_sequential_index += 1
+                    mapped_values[str(next_sequential_index)] = raw_value
+                    next_sequential_index += 1
+                continue
+
+            if parsed_payload not in (None, ""):
+                while str(next_sequential_index) in mapped_values:
+                    next_sequential_index += 1
+                mapped_values[str(next_sequential_index)] = parsed_payload
+                next_sequential_index += 1
+
+        def parse_param_id(param_id: str) -> List[int]:
+            return [int(part) if part.isdigit() else 0 for part in str(param_id).split(".")]
+
+        for field_id in sorted(mapped_values.keys(), key=parse_param_id):
+            value = mapped_values[field_id]
+            if value in (None, ""):
+                continue
+
+            self._set_param(
+                blocks,
+                10,
+                field_id,
+                field_names.get(field_id, f"Пункт {field_id}"),
+                value,
+                display_mode=self.DISPLAY_MODE_NUMBER_ONLY,
+            )
 
     def _build_full_card_blocks(self, element_id: int) -> Dict[int, Dict[str, Any]]:
         blocks = self._build_template_blocks()
