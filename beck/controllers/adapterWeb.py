@@ -1,11 +1,11 @@
-from fastapi import Body, FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from interfaces.i_controllers import IControllers
 import uvicorn
+from fastapi import Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-from urllib.parse import quote
 
 urlObjec = "object"
 
@@ -49,24 +49,6 @@ def create_adapter(controller: IControllers,):
                 }
             elif control_type == "createParamOption":
                 tech_card = controller.createParamOption(payload)
-            elif control_type == "exportTechCard":
-                exported_file = controller.exportTechCard(payload)
-                filename = exported_file.get("filename", "tech-card.docx")
-                content_type = exported_file.get(
-                    "content_type",
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                )
-                headers = {
-                    "Content-Disposition": (
-                        f"attachment; filename=\"tech-card.docx\"; "
-                        f"filename*=UTF-8''{quote(filename)}"
-                    )
-                }
-                return Response(
-                    content=exported_file.get("content", b""),
-                    media_type=content_type,
-                    headers=headers,
-                )
             else:
                 return {}
 

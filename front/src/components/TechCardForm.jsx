@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronRight, Loader2, FileCheck, CheckCircle, AlertCircle, Plus, Trash2, Image, X, Download } from 'lucide-react';
 import api from '../services/api';
-import { buildTechCardPayload, buildExportTechCardPayload, updateTechCard } from '../data/formConfig';
+import { buildTechCardPayload, updateTechCard } from '../data/formConfig';
+import { exportTechCardToWord } from '../utils/techCardExport';
 
 const ROSATOM_METHODOLOGY_ID = '0';
 const GAZPROM_METHODOLOGY_ID = '1';
@@ -1584,31 +1585,16 @@ const TechCardForm = () => {
     setIsExporting(true);
 
     try {
-      const exportPayload = buildExportTechCardPayload({
-        type: objectType,
-        methodology: selectedMethodology,
+      await exportTechCardToWord({
+        title: 'Технологическая карта',
+        methodologyName: methodologyInputValue?.trim() || '',
+        objectName: objectInputValue?.trim() || '',
+        elementName: isGazpromMethodology ? '' : (elementInputValue?.trim() || ''),
         blocks,
         paramValues,
-        selectedOptionIds,
         customFields,
         uploadedImages,
-        metadata: {
-          title: 'Технологическая карта',
-          methodologyName: methodologyInputValue?.trim() || '',
-          objectName: objectInputValue?.trim() || '',
-          elementName: isGazpromMethodology ? '' : (elementInputValue?.trim() || ''),
-        },
       });
-
-      const { blob, filename } = await api.exportTechCard(exportPayload);
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = filename || 'tech-card.docx';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(downloadUrl);
     } catch (error) {
       console.error('Ошибка экспорта техкарты:', error);
       alert(`Ошибка экспорта техкарты: ${error.message}`);
@@ -2046,23 +2032,24 @@ const TechCardForm = () => {
               transition-all border
               ${hasSelectedElement && !isExporting && !loadingBlocks
                 ? 'border-[#8FB996]/40 bg-[#8FB996]/10 text-white hover:bg-[#8FB996]/18 hover:border-[#8FB996]/60'
-                : 'border-[#646C89]/30 bg-[#646C89]/15 text-[#646C89] cursor-not-allowed'
+                : 'border-[#646C89]/30 text-[#646C89] bg-[#646C89]/15 cursor-not-allowed'
               }
             `}
           >
             {isExporting ? (
               <>
                 <Loader2 size={22} className="animate-spin" />
-                Экспорт...
+                Подготовка документа...
               </>
             ) : (
               <>
                 <Download size={22} />
-                Скачать .docx
+                Скачать Word
               </>
             )}
           </button>
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={!isFormValid() || isSubmitting}
             className={`
