@@ -238,9 +238,20 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         "development_times": {"table": "development_times", "value_column": "name"},
     }
 
-    OPERATION_FIELD_IDS = ["4.1", "4.2", "4.3", "4.4", "4.5"]
     SCHEME_BLOCK_ID = 6
     SCHEME_PARAM_ID = "1"
+
+    def _is_block_8_operation_param_id(self, param_id: str) -> bool:
+        normalised = str(param_id).strip()
+        if normalised == "4":
+            return True
+
+        parts = normalised.split(".")
+        return (
+            len(parts) == 2
+            and parts[0] == "4"
+            and all(part.isdigit() for part in parts[1:])
+        )
 
     def _is_db_available(self) -> bool:
         return bool(self.conn and self.cursor)
@@ -262,7 +273,7 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
     def _get_default_display_mode(self, block_id: int, param_id: str) -> str | None:
         if block_id in (9, 10):
             return self.DISPLAY_MODE_NUMBER_ONLY
-        if block_id == 8 and str(param_id) in {"4", "4.1", "4.2", "4.3", "4.4", "4.5"}:
+        if block_id == 8 and self._is_block_8_operation_param_id(str(param_id)):
             return self.DISPLAY_MODE_NUMBER_ONLY
         return None
 
@@ -907,14 +918,21 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
             param.pop("displayMode", None)
 
     def _apply_special_display_modes(self, blocks: Dict[int, Dict[str, Any]]) -> None:
-        self._clear_display_mode_params(blocks, 8, ["4.5.1", "4.5.2"])
-        self._mark_number_only_params(
-            blocks,
-            8,
-            ["4", "4.1", "4.2", "4.3", "4.4", "4.5"],
-        )
-        self._mark_number_only_params(blocks, 9, ["1", "2", "3", "4"])
-        self._mark_number_only_params(blocks, 10, ["1", "2", "3", "4", "5", "6", "7"])
+        for block_id in (8, 9, 10):
+            block = self._ensure_block(blocks, block_id)
+            params = block.get("params", {})
+            if not isinstance(params, dict):
+                continue
+
+            for param_id, param in params.items():
+                if not isinstance(param, dict):
+                    continue
+
+                display_mode = self._get_default_display_mode(block_id, str(param_id))
+                if display_mode:
+                    param["displayMode"] = display_mode
+                elif block_id == 8:
+                    param.pop("displayMode", None)
 
     def _ensure_block_layout_fields(self, blocks: Dict[int, Dict[str, Any]], block_id: int) -> None:
         block = self._ensure_block(blocks, block_id)
@@ -1145,6 +1163,164 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
             payload,
         )
 
+    def _normalise_operation_field_id(self, operation_index: Any) -> str | None:
+        raw_value = str(operation_index or "").strip()
+        if not raw_value:
+            return None
+
+        if raw_value.startswith("8."):
+            raw_value = raw_value.split(".", 1)[1]
+        elif raw_value.isdigit():
+            raw_value = f"4.{raw_value}"
+
+        parts = raw_value.split(".")
+        if not parts or parts[0] != "4" or not all(part.isdigit() for part in parts[1:]):
+            return None
+
+        return raw_value
+
+    def _allocate_next_operation_field_id(self, used_ids: set[str]) -> str:
+        next_index = 1
+        while f"4.{next_index}" in used_ids:
+            next_index += 1
+        return f"4.{next_index}"
+
+    def _clear_block_8_operation_params(self, blocks: Dict[int, Dict[str, Any]]) -> None:
+        block = self._ensure_block(blocks, 8)
+        params = block.get("params", {})
+        if not isinstance(params, dict):
+            return
+
+        for param_id in list(params.keys()):
+            normalised = str(param_id)
+            if normalised.startswith("4.") and normalised != "4":
+                params.pop(param_id, None)
+
+    def _format_operation_scalar(self, value: Any) -> str:
+        if value in (None, ""):
+            return ""
+        if isinstance(value, bool):
+            return "Да" if value else "Нет"
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, ensure_ascii=False)
+        return str(value).strip()
+
+    def _build_operation_value(self, payload: Dict[str, Any]) -> str:
+        actions = payload.get("actions")
+        if isinstance(actions, list):
+            action_items = [
+                self._format_operation_scalar(item)
+                for item in actions
+                if self._format_operation_scalar(item)
+            ]
+        else:
+            action_items = []
+
+        parts: List[str] = []
+        if action_items:
+            parts.append("; ".join(action_items))
+
+        marking_information = payload.get("marking_information")
+        if isinstance(marking_information, list):
+            marking_items = [
+                self._format_operation_scalar(item)
+                for item in marking_information
+                if self._format_operation_scalar(item)
+            ]
+            if marking_items:
+                parts.append(f"Маркировка: {'; '.join(marking_items)}")
+
+        ignored_keys = {
+            "step",
+            "title",
+            "description",
+            "actions",
+            "marking_information",
+            "substeps",
+            "procedure",
+            "section",
+        }
+        for key, raw_value in payload.items():
+            if key in ignored_keys:
+                continue
+            formatted_value = self._format_operation_scalar(raw_value)
+            if formatted_value:
+                parts.append(formatted_value)
+
+        if parts:
+            return " ".join(parts)
+
+        return self._format_operation_scalar(payload.get("title") or payload.get("description"))
+
+    def _expand_operation_payload(
+        self,
+        payload: Any,
+        fallback_operation_index: Any,
+        field_names: Dict[str, str],
+    ) -> List[Dict[str, str]]:
+        entries: List[Dict[str, str]] = []
+
+        if isinstance(payload, dict) and isinstance(payload.get("procedure"), list):
+            for procedure_item in payload.get("procedure", []):
+                entries.extend(
+                    self._expand_operation_payload(
+                        procedure_item,
+                        fallback_operation_index,
+                        field_names,
+                    )
+                )
+            return entries
+
+        if isinstance(payload, list):
+            for item in payload:
+                entries.extend(
+                    self._expand_operation_payload(
+                        item,
+                        fallback_operation_index,
+                        field_names,
+                    )
+                )
+            return entries
+
+        if isinstance(payload, dict):
+            field_id = self._normalise_operation_field_id(payload.get("step") or fallback_operation_index)
+            title = str(payload.get("title") or payload.get("description") or "").strip()
+            value = self._build_operation_value(payload)
+
+            if field_id and value:
+                entries.append(
+                    {
+                        "field_id": field_id,
+                        "name": title or field_names.get(field_id, f"Операция {field_id}"),
+                        "value": value,
+                    }
+                )
+
+            if isinstance(payload.get("substeps"), list):
+                for substep in payload.get("substeps", []):
+                    entries.extend(
+                        self._expand_operation_payload(
+                            substep,
+                            fallback_operation_index,
+                            field_names,
+                        )
+                    )
+
+            return entries
+
+        field_id = self._normalise_operation_field_id(fallback_operation_index)
+        value = self._format_operation_scalar(payload)
+        if field_id and value:
+            entries.append(
+                {
+                    "field_id": field_id,
+                    "name": field_names.get(field_id, f"Операция {field_id}"),
+                    "value": value,
+                }
+            )
+
+        return entries
+
     def create_param_option(self, payload: dict) -> dict:
         if not self._is_db_available():
             return {
@@ -1373,23 +1549,51 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         control_term_row: Dict[str, Any] | None,
         operations_rows: List[Dict[str, Any]],
     ) -> None:
+        self._clear_block_8_operation_params(blocks)
         self._set_param(blocks, 8, "1", "Место проведения контроля", control_term_row.get("control_place_name") if control_term_row else "")
         self._set_param(blocks, 8, "2", "Состав рабочего звена", control_term_row.get("working_link_composition_name") if control_term_row else "")
         self._set_param(blocks, 8, "3", "Диапазон рабочей температуры, °С", control_term_row.get("temperature_range_name") if control_term_row else "")
         self._set_param(blocks, 8, "4", "Последовательность технологических операций", "См. подпункты")
 
-        for index, field_id in enumerate(self.OPERATION_FIELD_IDS):
-            if index >= len(operations_rows):
-                break
-            field_name = next(
-                field["name"]
-                for field in self.BLOCK_LAYOUT[8]["fields"]
-                if field["id"] == field_id
-            )
-            self._set_param(blocks, 8, field_id, field_name, operations_rows[index].get("operation_name"))
+        field_names = {
+            str(field["id"]): field["name"]
+            for field in self.BLOCK_LAYOUT[8]["fields"]
+        }
+        used_field_ids: set[str] = {"4"}
 
-        self._set_param(blocks, 8, "4.5.1", "Фотообработка автоматическая", control_term_row.get("photo_processing_automatic_name") if control_term_row else "")
-        self._set_param(blocks, 8, "4.5.2", "Время проявления при танковой фотообработке, мин", control_term_row.get("development_time_name") if control_term_row else "")
+        for row in operations_rows:
+            parsed_operation = self._parse_json_payload(row.get("operation_name"))
+            operation_entries = self._expand_operation_payload(
+                parsed_operation,
+                row.get("operation_index"),
+                field_names,
+            )
+
+            if not operation_entries:
+                operation_entries = self._expand_operation_payload(
+                    row.get("operation_name"),
+                    row.get("operation_index"),
+                    field_names,
+                )
+
+            for operation_entry in operation_entries:
+                field_id = operation_entry["field_id"]
+                if field_id in used_field_ids:
+                    field_id = self._allocate_next_operation_field_id(used_field_ids)
+
+                used_field_ids.add(field_id)
+                self._set_param(
+                    blocks,
+                    8,
+                    field_id,
+                    operation_entry["name"],
+                    operation_entry["value"],
+                )
+
+        if not self._get_param(blocks, 8, "4.5.1"):
+            self._set_param(blocks, 8, "4.5.1", "Фотообработка автоматическая", control_term_row.get("photo_processing_automatic_name") if control_term_row else "")
+        if not self._get_param(blocks, 8, "4.5.2"):
+            self._set_param(blocks, 8, "4.5.2", "Время проявления при танковой фотообработке, мин", control_term_row.get("development_time_name") if control_term_row else "")
 
     def _fill_block_9(self, blocks: Dict[int, Dict[str, Any]], decoding_rows: List[Dict[str, Any]]) -> None:
         block = self._ensure_block(blocks, 9)
@@ -1667,14 +1871,15 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
 
         operations_rows = self._fetch_all_rows(
             """
-            SELECT operation_name
-            FROM tech_operation_sequences
-            WHERE control_term_id IN (
-                SELECT id
-                FROM control_terms
-                WHERE designation_id = %s
-            )
-            ORDER BY id
+            SELECT
+                tos.id,
+                tos.control_term_id,
+                tos.operation_index,
+                tos.operation_name
+            FROM control_terms ct
+            INNER JOIN tech_operation_sequences tos ON tos.control_term_id = ct.id
+            WHERE ct.designation_id = %s
+            ORDER BY ct.id, tos.id
             """,
             (designation_id,),
         ) if designation_id else []
