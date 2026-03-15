@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronRight, Loader2, FileCheck, CheckCircle, AlertCircle, Plus, Trash2, Image, X } from 'lucide-react';
 import api from '../services/api';
 import { buildTechCardPayload, updateTechCard } from '../data/formConfig';
@@ -187,6 +188,28 @@ const buildStandardValuesCacheFromBlocks = (blocks = []) => {
   return cache;
 };
 
+const getDropdownPosition = (anchorRect, preferredWidth, estimatedHeight) => {
+  const viewportPadding = 8;
+  const offset = 8;
+  const width = Math.min(preferredWidth, window.innerWidth - viewportPadding * 2);
+  const left = Math.min(
+    Math.max(viewportPadding, anchorRect.right - width),
+    window.innerWidth - width - viewportPadding
+  );
+  const spaceBelow = window.innerHeight - anchorRect.bottom - viewportPadding - offset;
+  const spaceAbove = anchorRect.top - viewportPadding - offset;
+  const openAbove = spaceAbove > spaceBelow && spaceAbove >= 120;
+
+  return {
+    left: `${left}px`,
+    width: `${width}px`,
+    maxHeight: `${Math.max(120, Math.min(estimatedHeight, openAbove ? spaceAbove : spaceBelow))}px`,
+    ...(openAbove
+      ? { bottom: `${window.innerHeight - anchorRect.top + offset}px` }
+      : { top: `${anchorRect.bottom + offset}px` }),
+  };
+};
+
 // Компонент поля с возможностью ввода И выбора из списка
 const ComboBoxField = ({ label, value, inputValue, options, onChange,
   onInputChange, loading, placeholder, disabled }) => {
@@ -359,7 +382,9 @@ const getTypeHint = (typeData) => {
 const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, typeData, displayMode }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState(null);
   const textareaRef = React.useRef(null);
+  const dropdownAnchorRef = React.useRef(null);
 
   const validation = validateByType(value, typeData);
   const showError = touched && !validation.isValid;
@@ -383,6 +408,31 @@ const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, t
   useEffect(() => {
     adjustHeight();
   }, []);
+
+  useEffect(() => {
+    if (!isOpen || suggestionOptions.length === 0) {
+      setDropdownStyle(null);
+      return undefined;
+    }
+
+    const updateDropdownPosition = () => {
+      if (!dropdownAnchorRef.current) {
+        return;
+      }
+
+      const anchorRect = dropdownAnchorRef.current.getBoundingClientRect();
+      setDropdownStyle(getDropdownPosition(anchorRect, 224, 160));
+    };
+
+    updateDropdownPosition();
+    window.addEventListener('resize', updateDropdownPosition);
+    window.addEventListener('scroll', updateDropdownPosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updateDropdownPosition);
+      window.removeEventListener('scroll', updateDropdownPosition, true);
+    };
+  }, [isOpen, suggestionOptions.length]);
 
   const handleChange = (newValue) => {
     const normalizedType = (typeData || 'string').toLowerCase();
@@ -422,7 +472,7 @@ const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, t
           {isNumberOnlyMode && (
             <span className="text-[#0084FF] font-mono text-sm shrink-0 pt-1">{paramKey}</span>
           )}
-          <div className={isNumberOnlyMode ? 'relative flex-1 min-w-0' : 'relative'}>
+          <div ref={dropdownAnchorRef} className={isNumberOnlyMode ? 'relative flex-1 min-w-0' : 'relative'}>
           <textarea
             ref={textareaRef}
             value={value}
@@ -457,10 +507,13 @@ const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, t
           <span className="text-xs text-red-500 mt-0.5 block">{validation.error}</span>
         )}
 
-        {isOpen && suggestionOptions.length > 0 && (
+        {isOpen && suggestionOptions.length > 0 && dropdownStyle && createPortal(
           <>
-            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-            <div className="absolute top-full right-0 w-56 mt-1 bg-[#0C1515] border border-[#646C89] rounded-lg shadow-lg z-50 max-h-40 overflow-y-auto">
+            <div className="fixed inset-0 z-[90]" onClick={() => setIsOpen(false)} />
+            <div
+              className="fixed bg-[#0C1515] border border-[#646C89] rounded-lg shadow-lg z-[100] overflow-y-auto"
+              style={dropdownStyle}
+            >
               <div className="p-2 border-b border-[#646C89]/30">
                 <span className="text-xs text-[#646C89]">Стандартные значения:</span>
               </div>
@@ -479,7 +532,8 @@ const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, t
                 </button>
               ))}
             </div>
-          </>
+          </>,
+          document.body
         )}
           </div>
         </div>
@@ -493,6 +547,8 @@ const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, t
 const InputWithSuggestions = ({ label, value, onChange, standardValues, loading, placeholder, typeData }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState(null);
+  const dropdownAnchorRef = React.useRef(null);
 
   const validation = validateByType(value, typeData);
   const showError = touched && !validation.isValid;
@@ -521,6 +577,31 @@ const InputWithSuggestions = ({ label, value, onChange, standardValues, loading,
     setTouched(true);
   };
 
+  useEffect(() => {
+    if (!isOpen || !standardValues || standardValues.length === 0) {
+      setDropdownStyle(null);
+      return undefined;
+    }
+
+    const updateDropdownPosition = () => {
+      if (!dropdownAnchorRef.current) {
+        return;
+      }
+
+      const anchorRect = dropdownAnchorRef.current.getBoundingClientRect();
+      setDropdownStyle(getDropdownPosition(anchorRect, 256, 192));
+    };
+
+    updateDropdownPosition();
+    window.addEventListener('resize', updateDropdownPosition);
+    window.addEventListener('scroll', updateDropdownPosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updateDropdownPosition);
+      window.removeEventListener('scroll', updateDropdownPosition, true);
+    };
+  }, [isOpen, standardValues]);
+
   return (
     <div className="relative">
       {/* Одна строка: label + input */}
@@ -531,7 +612,7 @@ const InputWithSuggestions = ({ label, value, onChange, standardValues, loading,
             <span className="ml-1 text-xs text-[#646C89]/70">({typeHint})</span>
           )}
         </label>
-        <div className="relative flex-1">
+        <div ref={dropdownAnchorRef} className="relative flex-1">
           <input
             type={getInputType(typeData)}
             value={value}
@@ -573,10 +654,13 @@ const InputWithSuggestions = ({ label, value, onChange, standardValues, loading,
         </span>
       )}
 
-      {isOpen && standardValues && standardValues.length > 0 && (
+      {isOpen && standardValues && standardValues.length > 0 && dropdownStyle && createPortal(
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute top-full right-0 w-64 mt-1 bg-[#0C1515] border border-[#646C89] rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+          <div className="fixed inset-0 z-[90]" onClick={() => setIsOpen(false)} />
+          <div
+            className="fixed bg-[#0C1515] border border-[#646C89] rounded-lg shadow-lg z-[100] overflow-y-auto"
+            style={dropdownStyle}
+          >
             <div className="p-2 border-b border-[#646C89]/30">
               <span className="text-xs text-[#646C89]">Стандартные значения:</span>
             </div>
@@ -595,7 +679,8 @@ const InputWithSuggestions = ({ label, value, onChange, standardValues, loading,
               </button>
             ))}
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );
