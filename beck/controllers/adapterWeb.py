@@ -47,6 +47,8 @@ def create_adapter(controller: IControllers,):
                         for methodology_id, methodology_name in methodologies.items()
                     ]
                 }
+            elif control_type == "createParamOption":
+                tech_card = controller.createParamOption(payload)
             else:
                 return {}
 

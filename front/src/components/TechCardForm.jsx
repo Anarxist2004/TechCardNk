@@ -379,7 +379,18 @@ const getTypeHint = (typeData) => {
 };
 
 // Компонент строки таблицы с полем ввода
-const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, typeData, displayMode }) => {
+const TableRowInput = ({
+  paramKey,
+  paramName,
+  value,
+  onChange,
+  onCreateOption,
+  standardValues,
+  typeData,
+  displayMode,
+  canCreateOption,
+  isCreatingOption,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [touched, setTouched] = useState(false);
   const [dropdownStyle, setDropdownStyle] = useState(null);
@@ -391,6 +402,13 @@ const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, t
   const typeHint = getTypeHint(typeData);
   const suggestionOptions = normalizeSuggestionOptions(standardValues);
   const isNumberOnlyMode = displayMode === DISPLAY_MODE_NUMBER_ONLY;
+  const trimmedValue = String(value || '').trim();
+  const hasExistingOption = suggestionOptions.some((option) => {
+    const optionLabel = String(option.label || option.value || '').trim().toLowerCase();
+    return optionLabel === trimmedValue.toLowerCase();
+  });
+  const canSaveOption = Boolean(canCreateOption) && trimmedValue !== '' && !hasExistingOption;
+  const hasActionButtons = suggestionOptions.length > 0 || canSaveOption || isCreatingOption;
 
   // Автоматическое подгонка textarea по высоте текста
   const adjustHeight = () => {
@@ -404,7 +422,6 @@ const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, t
     adjustHeight();
   }, [value]);
 
-  // Подгонка при первом рендере
   useEffect(() => {
     adjustHeight();
   }, []);
@@ -482,7 +499,7 @@ const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, t
             rows={1}
             className={`
               w-full bg-[#0C1515] border
-              rounded px-3 py-1.5 pr-8
+              rounded px-3 py-1.5 ${hasActionButtons ? 'pr-14' : 'pr-3'}
               text-white placeholder-[#646C89]
               focus:outline-none
               transition-colors text-sm
@@ -494,6 +511,17 @@ const TableRowInput = ({ paramKey, paramName, value, onChange, standardValues, t
             `}
             style={{ height: 'auto', minHeight: '28px', overflow: 'hidden', lineHeight: '1.4' }}
           />
+          {(canSaveOption || isCreatingOption) && (
+            <button
+              type="button"
+              onClick={() => onCreateOption?.()}
+              disabled={isCreatingOption}
+              className={`absolute top-1/2 -translate-y-1/2 text-[#646C89] hover:text-[#35C759] ${suggestionOptions.length > 0 ? 'right-8' : 'right-2'}`}
+              title="Сохранить значение в справочник"
+            >
+              {isCreatingOption ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+            </button>
+          )}
           {suggestionOptions.length > 0 && (
             <button
               type="button"
@@ -762,6 +790,7 @@ const TechCardForm = () => {
   const [uploadedImages, setUploadedImages] = useState({});
   const [nextImageId, setNextImageId] = useState(1);
   const [standardValuesCache, setStandardValuesCache] = useState({});
+  const [savingOptionKey, setSavingOptionKey] = useState(null);
 
   const isRosatomMethodology = selectedMethodology === ROSATOM_METHODOLOGY_ID;
   const isGazpromMethodology = selectedMethodology === GAZPROM_METHODOLOGY_ID;
@@ -1213,6 +1242,91 @@ const TechCardForm = () => {
   }, [blocks]);
 
   // Получение стандартных значений для параметра (из кэша или из param.value)
+  const handleCreateParamOption = async (blockId, param) => {
+    const compositeKey = `${blockId}.${param.id}`;
+    const currentValue = String(paramValues[compositeKey] || '').trim();
+
+    if (!currentValue) {
+      return;
+    }
+
+    setSavingOptionKey(compositeKey);
+
+    try {
+      const techCardPayload = buildTechCardPayload(
+        objectType,
+        selectedMethodology,
+        blocks,
+        paramValues,
+        selectedOptionIds
+      );
+
+      const result = await api.createParamOption({
+        methodology: parseInt(selectedMethodology, 10) || 0,
+        blockId,
+        paramId: param.id,
+        value: currentValue,
+        techCard: techCardPayload,
+      });
+
+      if (!result?.success) {
+        throw new Error(result?.message || 'Не удалось сохранить значение');
+      }
+
+      const savedName = String(result?.item?.name || currentValue);
+      const savedId = result?.item?.id ?? null;
+      const savedOption = savedId !== null && savedId !== undefined
+        ? { id: String(savedId), name: savedName }
+        : savedName;
+
+      setParamValues((prev) => ({
+        ...prev,
+        [compositeKey]: savedName,
+      }));
+
+      if (savedId !== null && savedId !== undefined) {
+        setSelectedOptionIds((prev) => ({
+          ...prev,
+          [compositeKey]: String(savedId),
+        }));
+      }
+
+      setStandardValuesCache((prev) => {
+        const currentOptions = (prev[compositeKey] && prev[compositeKey].length > 0)
+          ? prev[compositeKey]
+          : normalizeOptionValues(param.options);
+
+        const optionExists = currentOptions.some((option) => {
+          if (typeof option === 'object' && option !== null) {
+            return String(option.name || '').trim().toLowerCase() === savedName.toLowerCase();
+          }
+
+          return String(option).trim().toLowerCase() === savedName.toLowerCase();
+        });
+
+        if (optionExists) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          [compositeKey]: [...currentOptions, savedOption],
+        };
+      });
+
+      if (isGazpromMethodology && compositeKey === GAZPROM_SCHEME_PARAM_KEY && savedId !== null && savedId !== undefined) {
+        await handleParamChange(compositeKey, savedName, String(savedId));
+      }
+
+      alert(result.message || 'Значение сохранено');
+    } catch (error) {
+      console.error('Ошибка сохранения значения:', error);
+      alert(`Ошибка сохранения значения: ${error.message}`);
+    } finally {
+      setSavingOptionKey(null);
+    }
+  };
+
   const getStandardValuesForParam = (param, blockId) => {
     const compositeKey = `${blockId}.${param.id}`;
     
@@ -1600,9 +1714,12 @@ const TechCardForm = () => {
                                   paramName={param.name}
                                   value={paramValues[compositeKey] || ''}
                                   onChange={(val, selectedId) => handleParamChange(compositeKey, val, selectedId)}
+                                  onCreateOption={() => handleCreateParamOption(block.id, param)}
                                   standardValues={getStandardValuesForParam(param, block.id)}
                                   typeData={getParamTypeData(param)}
                                   displayMode={param.displayMode}
+                                  canCreateOption={param.canCreateOption}
+                                  isCreatingOption={savingOptionKey === compositeKey}
                                 />
                               );
                             })}

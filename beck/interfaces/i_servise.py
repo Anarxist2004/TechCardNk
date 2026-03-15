@@ -39,3 +39,7 @@ class IServise(ABC):
     @abstractmethod
     def getMethodologies(self)->T:
         pass
+
+    @abstractmethod
+    def createParamOption(self, payload)->T:
+        pass

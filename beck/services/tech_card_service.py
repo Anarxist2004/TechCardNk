@@ -75,3 +75,11 @@ class TechCardService(IServise):
 
     def getMethodologies(self) -> dict[int, str]:
         return dict(self.METHODOLOGIES)
+
+    def createParamOption(self, payload) -> dict:
+        methodology = 0
+        if isinstance(payload, dict):
+            methodology = payload.get("methodology", 0)
+
+        repo = self._get_repo(methodology)
+        return repo.create_param_option(payload if isinstance(payload, dict) else {})

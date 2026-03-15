@@ -40,6 +40,10 @@ class IControllers(ABC, Generic[T]):
     @abstractmethod
     def getMethodologies(self)->T:
         pass
+
+    @abstractmethod
+    def createParamOption(self, payload)->T:
+        pass
     
     # @abstractmethod
     # def selectionOfControlObject(self)->T:

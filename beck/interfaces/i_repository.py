@@ -41,5 +41,9 @@ class IRepository(ABC, Generic[T]):
     def get_params_for_element(self, element_id: int) -> T:
         pass
 
+    @abstractmethod
+    def create_param_option(self, payload: dict) -> dict:
+        pass
+
     def sync_tech_card(self, tech_card: T) -> T:
         return tech_card

@@ -115,6 +115,7 @@ function transformBlocksResponse(data) {
           typeData: param.typeData || 'string',
           displayMode: param.displayMode || null,
           selectedId: param.selectedId ?? null,
+          canCreateOption: Boolean(param.canCreateOption),
           image: param.image || null,
           blockId: blockId,
           blockName: block.name
@@ -198,6 +199,7 @@ function extractParamsFromBlocks(blocksData) {
         options: param.options || [],
         selectedId: param.selectedId ?? null,
         displayMode: param.displayMode || null,
+        canCreateOption: Boolean(param.canCreateOption),
         blockId: param.blockId,
         blockName: param.blockName
       });
@@ -323,6 +325,10 @@ export const api = {
     return transformBlocksResponse(data);
   },
 
+  createParamOption: async (payload) => {
+    return postRequest('createParamOption', payload);
+  },
+
   /**
    * Получить сырые данные (без преобразования)
    */
@@ -346,6 +352,7 @@ export const api = {
       methodology: parseInt(methodology, 10) || 0,
     }),
     updateTechCard: (techCardData) => postRequest('updateTechCard', { techCard: techCardData }),
+    createParamOption: (payload) => postRequest('createParamOption', payload),
   }
 };
 

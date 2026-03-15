@@ -594,3 +594,9 @@ class PostgresDataBase(IRepository[TechCardData]):
             print(f"Error in get_params_for_element: {e}")
             self.conn.rollback()
             return TechCardData()
+
+    def create_param_option(self, payload: dict) -> dict:
+        return {
+            "success": False,
+            "message": "Создание стандартных значений для этой методики не поддерживается",
+        }

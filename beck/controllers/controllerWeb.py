@@ -35,3 +35,6 @@ class ControllerWeb(IControllers[TechCardData]):
 
     def getMethodologies(self):
         return self.serv.getMethodologies()
+
+    def createParamOption(self, payload):
+        return self.serv.createParamOption(payload)

@@ -174,6 +174,70 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         "development_times": {"query": "SELECT DISTINCT name FROM development_times WHERE name IS NOT NULL AND name <> '' ORDER BY name"},
     }
 
+    CREATE_OPTION_CONFIGS: Dict[str, Dict[str, Any]] = {
+        "manufacturers": {"table": "manufacturers", "value_column": "name"},
+        "drawing_numbers": {
+            "table": "drawing_numbers",
+            "value_column": "name",
+            "foreign_keys": {"manufacturer_id": "_resolve_manufacturer_id"},
+        },
+        "controlled_elements": {
+            "table": "controlled_elements",
+            "value_column": "name",
+            "foreign_keys": {"drawing_number_id": "_resolve_drawing_number_id"},
+        },
+        "detail_drawings": {
+            "table": "detail_drawings",
+            "value_column": "name",
+            "foreign_keys": {"drawing_number_id": "_resolve_drawing_number_id"},
+        },
+        "welded_joint_types": {"table": "welded_joint_types", "value_column": "name"},
+        "designations": {
+            "table": "designations",
+            "value_column": "name",
+            "foreign_keys": {"drawing_number_id": "_resolve_drawing_number_id"},
+        },
+        "welding_methods": {"table": "welding_methods", "value_column": "name"},
+        "metals": {"table": "metals", "value_column": "name"},
+        "welding_materials": {"table": "welding_materials", "value_column": "name"},
+        "documentation_normative": {
+            "table": "documentation",
+            "value_column": "name",
+            "static_values": {"type": "Нормативная"},
+        },
+        "documentation_methodical": {
+            "table": "documentation",
+            "value_column": "name",
+            "static_values": {"type": "Методическая"},
+        },
+        "welded_joint_categories": {"table": "welded_joint_categories", "value_column": "name"},
+        "scope_of_controls": {"table": "scope_of_controls", "value_column": "name"},
+        "radiation_sources": {"table": "radiation_sources", "value_column": "name"},
+        "radiographic_film_types": {"table": "radiographic_film_types", "value_column": "name"},
+        "film_loading_types": {"table": "film_loading_types", "value_column": "name"},
+        "sensitivity_standard_types": {"table": "sensitivity_standard_types", "value_column": "name"},
+        "marking_sign_types": {"table": "marking_sign_types", "value_column": "name"},
+        "non_standard_cassettes": {"table": "non_standard_cassettes", "value_column": "name"},
+        "densitometer_types": {"table": "densitometer_types", "value_column": "name"},
+        "negatoscope_types": {"table": "negatoscope_types", "value_column": "name"},
+        "ruler_types": {"table": "ruler_types", "value_column": "name"},
+        "protractor_types": {"table": "protractor_types", "value_column": "name"},
+        "magnifier_types": {"table": "magnifier_types", "value_column": "name"},
+        "paint_detector_types": {"table": "paint_detector_types", "value_column": "name"},
+        "photo_processing_automatic": {"table": "photo_processing_automatic", "value_column": "name"},
+        "transmission_schemes": {
+            "table": "transmission_schemes",
+            "value_column": "reference",
+            "foreign_keys": {"welded_joint_type_id": "_resolve_welded_joint_type_id"},
+        },
+        "surface_quality_requirements": {"table": "surface_quality_requirements", "value_column": "name"},
+        "marking_sections": {"table": "marking_sections", "value_column": "name"},
+        "control_places": {"table": "control_places", "value_column": "name"},
+        "working_link_compositions": {"table": "working_link_compositions", "value_column": "name"},
+        "temperature_ranges": {"table": "temperature_ranges", "value_column": "name"},
+        "development_times": {"table": "development_times", "value_column": "name"},
+    }
+
     OPERATION_FIELD_IDS = ["4.1", "4.2", "4.3", "4.4", "4.5"]
     SCHEME_BLOCK_ID = 6
     SCHEME_PARAM_ID = "1"
@@ -327,6 +391,28 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         except (TypeError, ValueError):
             return None
 
+    def _resolve_manufacturer_id(self, source: TechCardData | Dict[int, Dict[str, Any]]) -> int | None:
+        manufacturer_name = self._get_param_value(source, 1, "1")
+        if not manufacturer_name:
+            return None
+
+        row = self._fetch_one_row(
+            """
+            SELECT id
+            FROM manufacturers
+            WHERE name = %s
+            LIMIT 1
+            """,
+            (manufacturer_name,),
+        )
+        if not row:
+            return None
+
+        try:
+            return int(row.get("id"))
+        except (TypeError, ValueError):
+            return None
+
     def _resolve_designation_id(self, source: TechCardData | Dict[int, Dict[str, Any]]) -> int | None:
         designation_name = self._get_param_value(source, 1, "7")
         drawing_number_id = self._resolve_drawing_number_id(source)
@@ -381,6 +467,29 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
             return int(row.get("id"))
         except (TypeError, ValueError):
             return None
+
+    def _get_field_definition(self, block_id: int | str, param_id: str) -> Dict[str, Any] | None:
+        try:
+            layout = self.BLOCK_LAYOUT.get(int(block_id))
+        except (TypeError, ValueError):
+            return None
+
+        if not layout:
+            return None
+
+        for field in layout.get("fields", []):
+            if str(field.get("id")) == str(param_id):
+                return field
+
+        return None
+
+    def _is_field_creatable(self, block_id: int | str, param_id: str) -> bool:
+        field = self._get_field_definition(block_id, param_id)
+        if not field:
+            return False
+
+        options_key = field.get("options_key")
+        return bool(options_key and options_key in self.CREATE_OPTION_CONFIGS)
 
     def _get_transmission_scheme_foreign_keys(self) -> List[Dict[str, Any]]:
         return self._fetch_all_rows(
@@ -685,6 +794,7 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
         image: Any = None,
         display_mode: str | None = None,
         selected_id: Any = None,
+        can_create_option: bool | None = None,
     ) -> None:
         block = self._ensure_block(blocks, block_id)
         existing = block["params"].get(str(param_id), {})
@@ -694,11 +804,17 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
             or self._get_default_display_mode(block_id, str(param_id))
         )
         resolved_selected_id = existing.get("selectedId") if selected_id is None else selected_id
+        resolved_can_create_option = (
+            existing.get("canCreateOption", False)
+            if can_create_option is None
+            else can_create_option
+        )
         block["params"][str(param_id)] = {
             "name": name,
             "val": self._normalise_value(value),
             "options": existing.get("options", []) if options is None else options,
             "typeData": existing.get("typeData", "string") if type_data is None else type_data,
+            "canCreateOption": bool(resolved_can_create_option),
         }
         if resolved_display_mode:
             block["params"][str(param_id)]["displayMode"] = resolved_display_mode
@@ -756,6 +872,7 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
                 existing.setdefault("val", self._normalise_value(field.get("default", "")))
                 existing.setdefault("options", [])
                 existing.setdefault("typeData", field.get("typeData", "string"))
+                existing.setdefault("canCreateOption", self._is_field_creatable(block_id, field_id))
                 default_display_mode = self._get_default_display_mode(block_id, field_id)
                 if default_display_mode:
                     existing.setdefault("displayMode", default_display_mode)
@@ -766,6 +883,7 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
                 "val": self._normalise_value(field.get("default", "")),
                 "options": [],
                 "typeData": field.get("typeData", "string"),
+                "canCreateOption": self._is_field_creatable(block_id, field_id),
             }
             default_display_mode = self._get_default_display_mode(block_id, field_id)
             if default_display_mode:
@@ -799,10 +917,162 @@ class PostgreDbShablovGazprom(PostgreDbShablov):
                     value=field.get("default", ""),
                     options=options_map.get(field.get("options_key", ""), []),
                     type_data=field.get("typeData", "string"),
+                    can_create_option=self._is_field_creatable(block_id, str(field["id"])),
                 )
 
         self._apply_special_display_modes(blocks)
         return blocks
+
+    def _extract_source_blocks(self, payload: Dict[str, Any] | None) -> Dict[int, Dict[str, Any]]:
+        if not isinstance(payload, dict):
+            return {}
+
+        tech_card = payload.get("techCard")
+        if isinstance(tech_card, dict):
+            params = tech_card.get("params")
+            if isinstance(params, dict):
+                return params
+            return tech_card
+
+        params = payload.get("params")
+        if isinstance(params, dict):
+            return params
+
+        return {}
+
+    def _resolve_create_foreign_keys(self, config: Dict[str, Any], source: Dict[int, Dict[str, Any]]) -> Dict[str, Any]:
+        foreign_keys: Dict[str, Any] = {}
+        for column_name, resolver_name in config.get("foreign_keys", {}).items():
+            resolver = getattr(self, resolver_name, None)
+            if callable(resolver):
+                foreign_keys[column_name] = resolver(source)
+        return foreign_keys
+
+    def _build_option_lookup_conditions(self, values: Dict[str, Any]) -> tuple[str, List[Any]]:
+        conditions: List[str] = []
+        params: List[Any] = []
+
+        for column_name, value in values.items():
+            if value is None:
+                conditions.append(f'"{column_name}" IS NULL')
+                continue
+
+            conditions.append(f'"{column_name}" = %s')
+            params.append(value)
+
+        return " AND ".join(conditions), params
+
+    def _find_existing_option_row(self, table_name: str, value_column: str, lookup_values: Dict[str, Any]) -> Dict[str, Any] | None:
+        where_clause, params = self._build_option_lookup_conditions(lookup_values)
+        if not where_clause:
+            return None
+
+        return self._fetch_one_row(
+            f'''
+            SELECT id, "{value_column}" AS value
+            FROM {table_name}
+            WHERE {where_clause}
+            ORDER BY id
+            LIMIT 1
+            ''',
+            tuple(params),
+        )
+
+    def _insert_option_row(self, table_name: str, value_column: str, insert_values: Dict[str, Any]) -> Dict[str, Any] | None:
+        columns = list(insert_values.keys())
+        if not columns:
+            return None
+
+        column_sql = ", ".join(f'"{column_name}"' for column_name in columns)
+        placeholders = ", ".join(["%s"] * len(columns))
+        values = [insert_values[column_name] for column_name in columns]
+
+        try:
+            self.cursor.execute(
+                f'''
+                INSERT INTO {table_name} ({column_sql})
+                VALUES ({placeholders})
+                RETURNING id, "{value_column}" AS value
+                ''',
+                tuple(values),
+            )
+            self.conn.commit()
+            return self.cursor.fetchone()
+        except Exception:
+            self.conn.rollback()
+            raise
+
+    def create_param_option(self, payload: dict) -> dict:
+        if not self._is_db_available():
+            return {
+                "success": False,
+                "message": "База данных недоступна",
+            }
+
+        value = str((payload or {}).get("value") or "").strip()
+        if not value:
+            return {
+                "success": False,
+                "message": "Пустое значение нельзя сохранить",
+            }
+
+        field = self._get_field_definition((payload or {}).get("blockId"), str((payload or {}).get("paramId") or ""))
+        if not field:
+            return {
+                "success": False,
+                "message": "Поле для сохранения не найдено",
+            }
+
+        options_key = field.get("options_key")
+        if not options_key or options_key not in self.CREATE_OPTION_CONFIGS:
+            return {
+                "success": False,
+                "message": "Для этого поля сохранение в справочник не поддерживается",
+            }
+
+        config = self.CREATE_OPTION_CONFIGS[options_key]
+        source_blocks = self._extract_source_blocks(payload)
+        value_column = str(config["value_column"])
+        table_name = str(config["table"])
+
+        lookup_values: Dict[str, Any] = {value_column: value}
+        lookup_values.update(config.get("static_values", {}))
+        lookup_values.update(self._resolve_create_foreign_keys(config, source_blocks))
+
+        try:
+            existing_row = self._find_existing_option_row(table_name, value_column, lookup_values)
+            if existing_row:
+                return {
+                    "success": True,
+                    "created": False,
+                    "message": "Значение уже существует",
+                    "item": {
+                        "id": existing_row.get("id"),
+                        "name": str(existing_row.get("value") or value),
+                    },
+                }
+
+            created_row = self._insert_option_row(table_name, value_column, lookup_values)
+            if not created_row:
+                return {
+                    "success": False,
+                    "message": "Не удалось сохранить значение",
+                }
+
+            return {
+                "success": True,
+                "created": True,
+                "message": "Значение сохранено",
+                "item": {
+                    "id": created_row.get("id"),
+                    "name": str(created_row.get("value") or value),
+                },
+            }
+        except Exception as error:
+            return {
+                "success": False,
+                "message": f"Ошибка сохранения значения: {error}",
+            }
 
     def _resolve_element_id(self, element_id: int | str | None) -> int:
         try:
