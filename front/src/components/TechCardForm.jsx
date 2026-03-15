@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, ChevronRight, Loader2, FileCheck, CheckCircle, AlertCircle, Plus, Trash2, Image, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, FileCheck, CheckCircle, AlertCircle, Plus, Trash2, Image, X, Download } from 'lucide-react';
 import api from '../services/api';
-import { buildTechCardPayload, updateTechCard } from '../data/formConfig';
+import { buildTechCardPayload, buildExportTechCardPayload, updateTechCard } from '../data/formConfig';
 
 const ROSATOM_METHODOLOGY_ID = '0';
 const GAZPROM_METHODOLOGY_ID = '1';
@@ -807,6 +807,7 @@ const TechCardForm = () => {
 
   // Флаг отправки на обработку
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Состояние свёрнутых/развёрнутых блоков { blockId: true/false }
   const [collapsedBlocks, setCollapsedBlocks] = useState({});
@@ -1575,6 +1576,47 @@ const TechCardForm = () => {
     }
   };
 
+  const handleExport = async () => {
+    if (!hasSelectedElement || isExporting) {
+      return;
+    }
+
+    setIsExporting(true);
+
+    try {
+      const exportPayload = buildExportTechCardPayload({
+        type: objectType,
+        methodology: selectedMethodology,
+        blocks,
+        paramValues,
+        selectedOptionIds,
+        customFields,
+        uploadedImages,
+        metadata: {
+          title: 'Технологическая карта',
+          methodologyName: methodologyInputValue?.trim() || '',
+          objectName: objectInputValue?.trim() || '',
+          elementName: isGazpromMethodology ? '' : (elementInputValue?.trim() || ''),
+        },
+      });
+
+      const { blob, filename } = await api.exportTechCard(exportPayload);
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename || 'tech-card.docx';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error('Ошибка экспорта техкарты:', error);
+      alert(`Ошибка экспорта техкарты: ${error.message}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const isFormValid = () => {
     const hasMethodology = Boolean(selectedMethodology);
     const hasObject = isGazpromMethodology ? true : objectInputValue.trim();
@@ -1992,13 +2034,39 @@ const TechCardForm = () => {
         )}
 
 
-        {/* Кнопка отправки */}
-        <div className="pt-4">
+        {/* Кнопки действий */}
+        <div className="pt-4 flex flex-col gap-3 md:flex-row">
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={!hasSelectedElement || isExporting || loadingBlocks}
+            className={`
+              w-full md:flex-1 flex items-center justify-center gap-3
+              py-4 rounded-xl font-semibold text-lg
+              transition-all border
+              ${hasSelectedElement && !isExporting && !loadingBlocks
+                ? 'border-[#8FB996]/40 bg-[#8FB996]/10 text-white hover:bg-[#8FB996]/18 hover:border-[#8FB996]/60'
+                : 'border-[#646C89]/30 bg-[#646C89]/15 text-[#646C89] cursor-not-allowed'
+              }
+            `}
+          >
+            {isExporting ? (
+              <>
+                <Loader2 size={22} className="animate-spin" />
+                Экспорт...
+              </>
+            ) : (
+              <>
+                <Download size={22} />
+                Скачать .docx
+              </>
+            )}
+          </button>
           <button
             onClick={handleSubmit}
             disabled={!isFormValid() || isSubmitting}
             className={`
-              w-full flex items-center justify-center gap-3
+              w-full md:flex-1 flex items-center justify-center gap-3
               py-4 rounded-xl font-semibold text-lg
               transition-all
               ${isFormValid() && !isSubmitting

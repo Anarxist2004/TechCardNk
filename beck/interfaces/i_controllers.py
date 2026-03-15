@@ -44,6 +44,10 @@ class IControllers(ABC, Generic[T]):
     @abstractmethod
     def createParamOption(self, payload)->T:
         pass
+
+    @abstractmethod
+    def exportTechCard(self, payload)->T:
+        pass
     
     # @abstractmethod
     # def selectionOfControlObject(self)->T:

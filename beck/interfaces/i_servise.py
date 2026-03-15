@@ -43,3 +43,7 @@ class IServise(ABC):
     @abstractmethod
     def createParamOption(self, payload)->T:
         pass
+
+    @abstractmethod
+    def exportTechCard(self, payload)->T:
+        pass

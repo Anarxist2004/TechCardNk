@@ -30,6 +30,65 @@ async function postRequest(endpoint, payload = {}) {
   }
 }
 
+function getErrorMessageFromText(text, status) {
+  if (!text) {
+    return `HTTP error! status: ${status}`;
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed?.detail === 'string' && parsed.detail.trim()) {
+      return parsed.detail;
+    }
+    if (typeof parsed?.message === 'string' && parsed.message.trim()) {
+      return parsed.message;
+    }
+  } catch {
+    return text;
+  }
+
+  return `HTTP error! status: ${status}`;
+}
+
+function getFileNameFromDisposition(dispositionHeader) {
+  if (!dispositionHeader) {
+    return null;
+  }
+
+  const utfMatch = dispositionHeader.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utfMatch?.[1]) {
+    try {
+      return decodeURIComponent(utfMatch[1]);
+    } catch {
+      return utfMatch[1];
+    }
+  }
+
+  const simpleMatch = dispositionHeader.match(/filename="([^"]+)"/i) || dispositionHeader.match(/filename=([^;]+)/i);
+  return simpleMatch?.[1] ? simpleMatch[1].trim() : null;
+}
+
+async function postBlobRequest(endpoint, payload = {}) {
+  const response = await fetch(`${API_URL}/${endpoint}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(getErrorMessageFromText(text, response.status));
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: getFileNameFromDisposition(response.headers.get('Content-Disposition')),
+    contentType: response.headers.get('Content-Type') || '',
+  };
+}
+
 /**
  * Преобразует ответ с типами объектов контроля
  * Формат ответа: { type: { "0": "Пластина", "1": "Труба" }, params: {} }
@@ -329,6 +388,10 @@ export const api = {
     return postRequest('createParamOption', payload);
   },
 
+  exportTechCard: async (payload) => {
+    return postBlobRequest('exportTechCard', payload);
+  },
+
   /**
    * Получить сырые данные (без преобразования)
    */
@@ -353,6 +416,7 @@ export const api = {
     }),
     updateTechCard: (techCardData) => postRequest('updateTechCard', { techCard: techCardData }),
     createParamOption: (payload) => postRequest('createParamOption', payload),
+    exportTechCard: (payload) => postBlobRequest('exportTechCard', payload),
   }
 };
 

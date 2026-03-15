@@ -1,5 +1,6 @@
 from services.tech_card import TechCardData
 from services.PipeLine import PipeLine
+from services.document_export_service import DocumentExportService
 from interfaces.i_repository import IRepository
 from interfaces.i_controllers import IControllers
 from interfaces.i_servise import IServise
@@ -14,9 +15,15 @@ class TechCardService(IServise):
         GAZPROM_METHODOLOGY: "Газпром",
     }
 
-    def __init__(self, repos: dict[int, IRepository], piLine: PipeLine):
+    def __init__(
+        self,
+        repos: dict[int, IRepository],
+        piLine: PipeLine,
+        document_export_service: DocumentExportService | None = None,
+    ):
         self.repos = repos
         self.pipeLine = piLine
+        self.document_export_service = document_export_service or DocumentExportService()
 
     def _normalise_methodology(self, methodology) -> int:
         try:
@@ -83,3 +90,29 @@ class TechCardService(IServise):
 
         repo = self._get_repo(methodology)
         return repo.create_param_option(payload if isinstance(payload, dict) else {})
+
+    def exportTechCard(self, payload) -> dict:
+        export_payload = payload if isinstance(payload, dict) else {}
+        tech_card_payload = export_payload.get("techCard")
+        if not isinstance(tech_card_payload, dict):
+            tech_card_payload = export_payload
+
+        data = TechCardData()
+        data.from_jsonDeSerialise(tech_card_payload)
+
+        methodology_id = self._normalise_methodology(
+            data.getMethodology() if data.getMethodology() is not None else export_payload.get("methodology", 0)
+        )
+        data.methodology = methodology_id
+        data.sort_all_params()
+
+        export_metadata = dict(export_payload.get("metadata") or {})
+        export_metadata.setdefault("methodologyName", self.METHODOLOGIES.get(methodology_id, "Техкарта"))
+
+        return self.document_export_service.export_docx(
+            data,
+            {
+                **export_payload,
+                "metadata": export_metadata,
+            },
+        )

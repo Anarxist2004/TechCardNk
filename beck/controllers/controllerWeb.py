@@ -38,3 +38,6 @@ class ControllerWeb(IControllers[TechCardData]):
 
     def createParamOption(self, payload):
         return self.serv.createParamOption(payload)
+
+    def exportTechCard(self, payload):
+        return self.serv.exportTechCard(payload)
