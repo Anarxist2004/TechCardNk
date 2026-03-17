@@ -1703,23 +1703,6 @@ const TechCardForm = () => {
               </div>
             )}
 
-            {/* Подсказка */}
-            {!loadingBlocks && !hasSelectedElement && (
-              <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity ${hasSelectedMethodology && hasSelectedObject ? 'opacity-100' : 'opacity-50'}`}>
-                <h3 className="text-[#D97B54] font-semibold mb-4">4. Параметры</h3>
-                <p className="text-[#646C89] text-center py-4">
-                  {!hasSelectedMethodology
-                    ? 'Сначала выберите методику'
-                    : isGazpromMethodology
-                      ? 'Параметры техкарты появятся после загрузки данных.'
-                      : hasSelectedObject
-                      ? isGazpromMethodology
-                        ? 'Выберите элемент контроля, чтобы сразу загрузить полную техкарту'
-                        : 'Выберите элемент контроля для загрузки параметров'
-                      : 'Сначала выберите тип объекта'}
-                </p>
-              </div>
-            )}
           </>
         )}
 
