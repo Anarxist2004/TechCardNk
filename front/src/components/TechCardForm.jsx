@@ -2003,61 +2003,62 @@ const TechCardForm = () => {
         )}
 
 
-        {/* Кнопки действий */}
-        <div className="pt-4 flex flex-col gap-3 md:flex-row">
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={!hasSelectedElement || isExporting || loadingBlocks}
-            className={`
-              w-full md:flex-1 flex items-center justify-center gap-3
-              py-4 rounded-xl font-semibold text-lg
-              transition-all border
-              ${hasSelectedElement && !isExporting && !loadingBlocks
-                ? 'border-[#8FB996]/40 bg-[#8FB996]/10 text-white hover:bg-[#8FB996]/18 hover:border-[#8FB996]/60'
-                : 'border-[#646C89]/30 text-[#646C89] bg-[#646C89]/15 cursor-not-allowed'
-              }
-            `}
-          >
-            {isExporting ? (
-              <>
-                <Loader2 size={22} className="animate-spin" />
-                Подготовка документа...
-              </>
-            ) : (
-              <>
-                <Download size={22} />
-                Скачать Word
-              </>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!isFormValid() || isSubmitting}
-            className={`
-              w-full md:flex-1 flex items-center justify-center gap-3
-              py-4 rounded-xl font-semibold text-lg
-              transition-all
-              ${isFormValid() && !isSubmitting
-                ? 'bg-[#D97B54] hover:bg-[#D97B54]/80 text-white shadow-lg hover:shadow-[#D97B54]/20'
-                : 'bg-[#646C89]/30 text-[#646C89] cursor-not-allowed'
-              }
-            `}
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 size={24} className="animate-spin" />
-                Обработка...
-              </>
-            ) : (
-              <>
-                <FileCheck size={24} />
-                Сформировать карту
-              </>
-            )}
-          </button>
-        </div>
+        {hasSelectedElement && (
+          <div className="pt-4 flex flex-col gap-3 md:flex-row">
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={isExporting || loadingBlocks}
+              className={`
+                w-full md:flex-1 flex items-center justify-center gap-3
+                py-4 rounded-xl font-semibold text-lg
+                transition-all border
+                ${!isExporting && !loadingBlocks
+                  ? 'border-[#8FB996]/40 bg-[#8FB996]/10 text-white hover:bg-[#8FB996]/18 hover:border-[#8FB996]/60'
+                  : 'border-[#646C89]/30 text-[#646C89] bg-[#646C89]/15 cursor-not-allowed'
+                }
+              `}
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 size={22} className="animate-spin" />
+                  Подготовка документа...
+                </>
+              ) : (
+                <>
+                  <Download size={22} />
+                  Скачать Word
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!isFormValid() || isSubmitting}
+              className={`
+                w-full md:flex-1 flex items-center justify-center gap-3
+                py-4 rounded-xl font-semibold text-lg
+                transition-all
+                ${isFormValid() && !isSubmitting
+                  ? 'bg-[#D97B54] hover:bg-[#D97B54]/80 text-white shadow-lg hover:shadow-[#D97B54]/20'
+                  : 'bg-[#646C89]/30 text-[#646C89] cursor-not-allowed'
+                }
+              `}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 size={24} className="animate-spin" />
+                  Обработка...
+                </>
+              ) : (
+                <>
+                  <FileCheck size={24} />
+                  Сформировать карту
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
