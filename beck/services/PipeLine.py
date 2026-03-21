@@ -9,16 +9,15 @@ class PipeLine:
     def addChanger(self,changer:IDataChanger,index:int ):
         if index < 0:
             raise IndexError("index must be >= 0")
-        
-        if(len(self.changerArr)>index):
-            self.changerArr[index].append(changer)
-        elif(len(self.changerArr)==index):
+
+        while len(self.changerArr) <= index:
             self.changerArr.append([])
-            self.changerArr[index].append(changer)
+
+        self.changerArr[index].append(changer)
 
     def process(self, techCard: TechCardData, index: int):
         try:
-            if len(self.changerArr) < index:
+            if index < 0 or index >= len(self.changerArr):
                 raise IndexError("index must be >= 0")
             
             for changer in self.changerArr[index]:

@@ -1,16 +1,13 @@
 from services.tech_card import TechCardData
 from services.PipeLine import PipeLine
 from interfaces.i_repository import IRepository
-from interfaces.i_controllers import IControllers
 from interfaces.i_servise import IServise
 
 
 class TechCardService(IServise):
-    ROSATOM_METHODOLOGY = 0
     GAZPROM_METHODOLOGY = 1
 
     METHODOLOGIES = {
-        ROSATOM_METHODOLOGY: "РосАтом",
         GAZPROM_METHODOLOGY: "Газпром",
     }
 
@@ -22,10 +19,10 @@ class TechCardService(IServise):
         try:
             methodology_id = int(methodology)
         except (TypeError, ValueError):
-            methodology_id = self.ROSATOM_METHODOLOGY
+            methodology_id = self.GAZPROM_METHODOLOGY
 
         if methodology_id not in self.repos:
-            return self.ROSATOM_METHODOLOGY
+            return self.GAZPROM_METHODOLOGY
 
         return methodology_id
 
@@ -55,7 +52,7 @@ class TechCardService(IServise):
         return techCars
 
     def getControlElementParamValue(self, idCntlEl, idParam) -> TechCardData:
-        repo = self._get_repo(self.ROSATOM_METHODOLOGY)
+        repo = self._get_repo(self.GAZPROM_METHODOLOGY)
         return repo.get_all_possible_values_by_param_and_element(idCntlEl, idParam)
 
     def geElementParamsValue(self, id, methodology=0) -> TechCardData:
@@ -77,9 +74,9 @@ class TechCardService(IServise):
         return dict(self.METHODOLOGIES)
 
     def createParamOption(self, payload) -> dict:
-        methodology = 0
+        methodology = self.GAZPROM_METHODOLOGY
         if isinstance(payload, dict):
-            methodology = payload.get("methodology", 0)
+            methodology = payload.get("methodology", self.GAZPROM_METHODOLOGY)
 
         repo = self._get_repo(methodology)
         return repo.create_param_option(payload if isinstance(payload, dict) else {})

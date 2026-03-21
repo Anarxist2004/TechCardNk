@@ -5,8 +5,8 @@ import api from '../services/api';
 import { buildTechCardPayload, updateTechCard } from '../data/formConfig';
 import { exportTechCardToWord } from '../utils/techCardExport';
 
-const ROSATOM_METHODOLOGY_ID = '0';
 const GAZPROM_METHODOLOGY_ID = '1';
+const GAZPROM_METHODOLOGY_NAME = 'Газпром';
 const DISPLAY_MODE_NUMBER_ONLY = 'number_only';
 const DISPLAY_MODE_IMAGE_FULL = 'image_full';
 const GAZPROM_SCHEME_PARAM_KEY = '6.1';
@@ -779,8 +779,8 @@ const InputWithSuggestions = ({ label, value, onChange, standardValues, loading,
 const TechCardForm = () => {
   const [methodologies, setMethodologies] = useState([]);
   const [loadingMethodologies, setLoadingMethodologies] = useState(true);
-  const [selectedMethodology, setSelectedMethodology] = useState(null);
-  const [methodologyInputValue, setMethodologyInputValue] = useState('');
+  const [selectedMethodology, setSelectedMethodology] = useState(GAZPROM_METHODOLOGY_ID);
+  const [methodologyInputValue, setMethodologyInputValue] = useState(GAZPROM_METHODOLOGY_NAME);
 
   // Типы объектов
   const [objectTypes, setObjectTypes] = useState([]);
@@ -854,7 +854,6 @@ const TechCardForm = () => {
   const [savingOptionKey, setSavingOptionKey] = useState(null);
   const [activeTabId, setActiveTabId] = useState(DEFAULT_ACTIVE_TAB);
 
-  const isRosatomMethodology = selectedMethodology === ROSATOM_METHODOLOGY_ID;
   const isGazpromMethodology = selectedMethodology === GAZPROM_METHODOLOGY_ID;
 
   const resetLoadedTechCard = () => {
@@ -879,14 +878,6 @@ const TechCardForm = () => {
     resetLoadedTechCard();
   };
 
-  const resetMethodologySelection = () => {
-    setSelectedMethodology(null);
-    setMethodologyInputValue('');
-    setObjectTypes([]);
-    setLoadingObjects(false);
-    resetObjectSelection();
-  };
-
   const applyLoadedTechCard = (data) => {
     const nextBlocks = data.blocks || [];
     const { values, selectedIds } = buildFormStateFromBlocks(nextBlocks);
@@ -898,6 +889,19 @@ const TechCardForm = () => {
     setSelectedOptionIds(selectedIds);
     setStandardValuesCache(buildStandardValuesCacheFromBlocks(nextBlocks));
     setActiveTabId(nextTabs[0]?.id || DEFAULT_ACTIVE_TAB);
+  };
+
+  const reloadGazpromTechCard = async () => {
+    setLoadingBlocks(true);
+    try {
+      const data = await api.getFullTechCard(GAZPROM_METHODOLOGY_ID);
+      applyLoadedTechCard(data);
+    } catch (error) {
+      console.error('Ошибка загрузки полной техкарты Газпром:', error);
+      resetLoadedTechCard();
+    } finally {
+      setLoadingBlocks(false);
+    }
   };
 
   // Обработчик загрузки изображения
@@ -1229,7 +1233,6 @@ const TechCardForm = () => {
       [compositeKey]: true
     }));
 
-    const shouldSyncRosatom = isRosatomMethodology;
     const shouldSyncGazpromScheme = (
       isGazpromMethodology
       && compositeKey === GAZPROM_SCHEME_PARAM_KEY
@@ -1238,7 +1241,7 @@ const TechCardForm = () => {
       && selectedOptionId !== ''
     );
 
-    if (!shouldSyncRosatom && !shouldSyncGazpromScheme) {
+    if (!shouldSyncGazpromScheme) {
       return;
     }
 
@@ -1657,7 +1660,7 @@ const TechCardForm = () => {
               />
             </div>
 
-            {!isGazpromMethodology && (
+            {false && (
               <>
                 {/* Секция 2: Выбор объекта */}
                 <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity
@@ -1728,16 +1731,10 @@ const TechCardForm = () => {
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  if (isGazpromMethodology) {
-                    resetMethodologySelection();
-                    return;
-                  }
-                  resetLoadedTechCard();
-                }}
+                onClick={reloadGazpromTechCard}
                 className="text-[#D97B54] hover:text-[#D97B54]/80 text-sm transition-colors"
               >
-                {isGazpromMethodology ? '← Изменить методику' : '← Изменить выбор'}
+                {'← Перезагрузить техкарту'}
               </button>
             </div>
 
