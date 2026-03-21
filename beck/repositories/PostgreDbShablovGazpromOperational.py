@@ -507,23 +507,6 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
                 None,
             )
 
-        default_joint_type_id = (context.get("designation_params") or {}).get("welded_joint_type_id")
-        if selected_row is None and default_joint_type_id is not None:
-            try:
-                selected_row = next(
-                    (
-                        row
-                        for row in joint_type_rows
-                        if row.get("id") is not None and int(row.get("id")) == int(default_joint_type_id)
-                    ),
-                    None,
-                )
-            except (TypeError, ValueError):
-                selected_row = None
-
-        if selected_row is None and joint_type_rows:
-            selected_row = joint_type_rows[0]
-
         return joint_type_rows, selected_row
 
     def _get_params_by_welded_joint_rows(self, welded_joint_type_id: int | None) -> List[Dict[str, Any]]:
@@ -533,11 +516,17 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
         table_name = "params_by_welded_joint"
         foreign_key_column = self._get_existing_column_name(
             table_name,
-            ["welded_joint_type_id", "welded_joint_types_id", "joint_type_id", "type_id"],
+            [
+                "types_of_welded_joint_id",
+                "welded_joint_type_id",
+                "welded_joint_types_id",
+                "joint_type_id",
+                "type_id",
+            ],
         )
         name_column = self._get_existing_column_name(
             table_name,
-            ["name", "param_name", "title", "label", "text"],
+            ["name_text", "name", "param_name", "title", "label", "text"],
         )
         value_column = self._get_existing_column_name(
             table_name,
@@ -548,16 +537,17 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
             ["block", "block_name", "section", "group_name"],
         )
 
-        if not foreign_key_column or not name_column or not value_column:
+        if not foreign_key_column or not name_column:
             return []
 
         block_select = f'"{block_column}" AS block_name' if block_column else "NULL AS block_name"
-        return self._fetch_all_rows(
+        value_select = f'"{value_column}" AS param_value' if value_column else "NULL AS param_value"
+        rows = self._fetch_all_rows(
             f'''
             SELECT
                 id,
                 "{name_column}" AS param_name,
-                "{value_column}" AS param_value,
+                {value_select},
                 {block_select}
             FROM {table_name}
             WHERE "{foreign_key_column}" = %s
@@ -565,35 +555,74 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
             ''',
             (welded_joint_type_id,),
         )
+        is_read_only = value_column is not None
+        for row in rows:
+            row["read_only"] = is_read_only
+        return rows
+
+    def _get_object_block_value_overrides(
+        self,
+        source: TechCardData | Dict[int, Dict[str, Any]] | None,
+    ) -> Dict[tuple[str, str], Any]:
+        if source is None:
+            return {}
+
+        blocks = source.params if isinstance(source, TechCardData) else source
+        if not isinstance(blocks, dict):
+            return {}
+
+        block = blocks.get(self.OBJECT_BLOCK_ID) or blocks.get(str(self.OBJECT_BLOCK_ID))
+        if not isinstance(block, dict):
+            return {}
+
+        params = block.get("params", {})
+        if not isinstance(params, dict):
+            return {}
+
+        group_names_by_prefix: Dict[str, str] = {}
+        value_overrides: Dict[tuple[str, str], Any] = {}
+
+        for param_id, param in sorted(
+            params.items(),
+            key=lambda item: self._parse_param_id_sort_key(item[0]),
+        ):
+            if not isinstance(param, dict):
+                continue
+
+            param_id_str = str(param_id)
+            if param_id_str in {self.JOINT_TYPE_PARAM_ID, self.JOINT_IMAGE_PARAM_ID}:
+                continue
+
+            if param.get("displayMode") == self.DISPLAY_MODE_SECTION_HEADER:
+                group_name = str(param.get("name") or "").strip()
+                if group_name:
+                    group_names_by_prefix[param_id_str] = group_name
+                continue
+
+            if param.get("readOnly"):
+                continue
+
+            param_name = str(param.get("name") or "").strip()
+            if not param_name:
+                continue
+
+            group_name = ""
+            if "." in param_id_str:
+                group_prefix = param_id_str.split(".", 1)[0]
+                group_name = group_names_by_prefix.get(group_prefix, "")
+
+            value_overrides[(group_name, param_name)] = param.get("val")
+
+        return value_overrides
 
     def _get_object_block_param_rows(
         self,
         context: Dict[str, Any],
         welded_joint_type_id: int | None,
     ) -> List[Dict[str, Any]]:
-        params_rows = self._get_params_by_welded_joint_rows(welded_joint_type_id)
-        if params_rows:
-            return params_rows
+        _ = context
+        return self._get_params_by_welded_joint_rows(welded_joint_type_id)
 
-        designation_params = context.get("designation_params") or {}
-        default_joint_type_id = designation_params.get("welded_joint_type_id")
-        try:
-            default_joint_type_id = int(default_joint_type_id) if default_joint_type_id is not None else None
-        except (TypeError, ValueError):
-            default_joint_type_id = None
-
-        # In the current schema there is no params_by_welded_joint table.
-        # Fall back to designation-linked data only for the designation's own
-        # welded joint type so we do not show stale dimensions for another type
-        # picked manually in the selector.
-        if (
-            welded_joint_type_id is None
-            or default_joint_type_id is None
-            or welded_joint_type_id != default_joint_type_id
-        ):
-            return []
-
-        fallback_rows: List[Dict[str, Any]] = []
         welding_method_name = str(designation_params.get("welding_method_name") or "").strip()
         if welding_method_name:
             fallback_rows.append(
@@ -602,6 +631,7 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
                     "param_name": "Тип сварки",
                     "param_value": welding_method_name,
                     "block_name": None,
+                    "read_only": True,
                 }
             )
 
@@ -616,6 +646,7 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
                     "param_name": param_name,
                     "param_value": row.get("value"),
                     "block_name": None,
+                    "read_only": True,
                 }
             )
 
@@ -625,6 +656,7 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
         self,
         blocks: Dict[int, Dict[str, Any]],
         context: Dict[str, Any],
+        source: TechCardData | Dict[int, Dict[str, Any]] | None = None,
         selected_joint_type_id: int | None = None,
         selected_joint_type_name: str | None = None,
     ) -> None:
@@ -673,6 +705,7 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
             selected_joint_type_row_id = None
 
         params_rows = self._get_object_block_param_rows(context, selected_joint_type_row_id)
+        value_overrides = self._get_object_block_value_overrides(source)
         rows_without_group: List[Dict[str, Any]] = []
         grouped_rows: Dict[str, List[Dict[str, Any]]] = {}
         group_order: List[str] = []
@@ -693,13 +726,28 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
             param_name = str(row.get("param_name") or "").strip()
             if not param_name:
                 continue
-            self._set_read_only_param(
-                blocks,
-                self.OBJECT_BLOCK_ID,
-                str(next_param_index),
-                param_name,
-                row.get("param_value"),
-            )
+            param_value = row.get("param_value")
+            is_read_only = bool(row.get("read_only"))
+            if not is_read_only and param_value in (None, ""):
+                param_value = value_overrides.get(("", param_name), "")
+
+            if is_read_only:
+                self._set_read_only_param(
+                    blocks,
+                    self.OBJECT_BLOCK_ID,
+                    str(next_param_index),
+                    param_name,
+                    param_value,
+                )
+            else:
+                self._set_param(
+                    blocks,
+                    self.OBJECT_BLOCK_ID,
+                    str(next_param_index),
+                    param_name,
+                    value=param_value,
+                    type_data="string",
+                )
             next_param_index += 1
 
         for group_name in group_order:
@@ -716,19 +764,34 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
                 param_name = str(row.get("param_name") or "").strip()
                 if not param_name:
                     continue
-                self._set_read_only_param(
-                    blocks,
-                    self.OBJECT_BLOCK_ID,
-                    f"{group_param_id}.{row_index}",
-                    param_name,
-                    row.get("param_value"),
-                )
+                param_value = row.get("param_value")
+                is_read_only = bool(row.get("read_only"))
+                if not is_read_only and param_value in (None, ""):
+                    param_value = value_overrides.get((group_name, param_name), "")
+
+                if is_read_only:
+                    self._set_read_only_param(
+                        blocks,
+                        self.OBJECT_BLOCK_ID,
+                        f"{group_param_id}.{row_index}",
+                        param_name,
+                        param_value,
+                    )
+                else:
+                    self._set_param(
+                        blocks,
+                        self.OBJECT_BLOCK_ID,
+                        f"{group_param_id}.{row_index}",
+                        param_name,
+                        value=param_value,
+                        type_data="string",
+                    )
 
     def _resolve_selected_scheme_row(
         self,
         source: TechCardData | Dict[int, Dict[str, Any]],
         selected_scheme_id: int | None = None,
-        selected_reference: str | None = None,
+        selected_scheme_reference: str | None = None,
     ) -> tuple[List[Dict[str, Any]], Dict[str, Any] | None]:
         scheme_rows = self._get_transmission_scheme_rows(source)
         selected_row = None
@@ -743,18 +806,15 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
                 None,
             )
 
-        if selected_row is None and selected_reference:
+        if selected_row is None and selected_scheme_reference:
             selected_row = next(
                 (
                     row
                     for row in scheme_rows
-                    if str(row.get("reference") or "").strip() == str(selected_reference).strip()
+                    if str(row.get("reference") or "").strip() == str(selected_scheme_reference).strip()
                 ),
                 None,
             )
-
-        if selected_row is None and scheme_rows:
-            selected_row = scheme_rows[0]
 
         return scheme_rows, selected_row
 
@@ -1060,6 +1120,7 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
     def _build_operational_card_blocks_safe(
         self,
         element_id: int,
+        source: TechCardData | Dict[int, Dict[str, Any]] | None = None,
         selected_joint_type_id: int | None = None,
         selected_joint_type_name: str | None = None,
         selected_scheme_id: int | None = None,
@@ -1068,6 +1129,7 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
         try:
             return self._build_operational_card_blocks(
                 element_id,
+                source=source,
                 selected_joint_type_id=selected_joint_type_id,
                 selected_joint_type_name=selected_joint_type_name,
                 selected_scheme_id=selected_scheme_id,
@@ -1087,6 +1149,7 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
     def _build_operational_card_blocks(
         self,
         element_id: int,
+        source: TechCardData | Dict[int, Dict[str, Any]] | None = None,
         selected_joint_type_id: int | None = None,
         selected_joint_type_name: str | None = None,
         selected_scheme_id: int | None = None,
@@ -1101,6 +1164,7 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
         self._fill_object_block(
             blocks,
             context,
+            source=source,
             selected_joint_type_id=selected_joint_type_id,
             selected_joint_type_name=selected_joint_type_name,
         )
@@ -1150,6 +1214,7 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
 
         tech_card.params = self._build_operational_card_blocks_safe(
             element_id,
+            source=tech_card,
             selected_joint_type_id=selected_joint_type_id,
             selected_joint_type_name=selected_joint_type_name,
             selected_scheme_id=selected_scheme_id,
