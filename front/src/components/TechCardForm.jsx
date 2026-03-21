@@ -1066,12 +1066,6 @@ const TechCardForm = () => {
                 );
               })}
             </div>
-            {loadingBlocks && hasBlocks && (
-              <div className="mt-3 inline-flex items-center gap-2 text-xs text-[#646C89]">
-                <Loader2 size={14} className="animate-spin" />
-                <span>Обновление техкарты...</span>
-              </div>
-            )}
           </div>
         </div>
 
