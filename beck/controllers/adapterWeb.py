@@ -1,3 +1,5 @@
+import traceback
+
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from interfaces.i_controllers import IControllers
@@ -27,18 +29,28 @@ def create_adapter(controller: IControllers,):
     @app.post("/techcard/{control_type}")
     async def adapter(control_type: str, payload: dict = Body(...)):
         print("Запрос пришёл")
+        request_payload = payload if isinstance(payload, dict) else {}
+
+        def safe_int(value, default=0):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return default
+
+        methodology = safe_int(request_payload.get("methodology", 0), 0)
+        element_id = safe_int(request_payload.get("idElement", 1), 1)
+        element_type = safe_int(request_payload.get("type", 1), 1)
         try:
-            methodology = payload.get("methodology", 0)
             if control_type == "object":
                 tech_card = controller.getObjectControl(methodology)
             elif control_type == "element":
-                tech_card = controller.getControlElements(payload.get("type", 1), methodology)
+                tech_card = controller.getControlElements(element_type, methodology)
             elif control_type == "elementParams":
-                tech_card = controller.getControlElementParam(payload.get("idElement", 1), methodology)
+                tech_card = controller.getControlElementParam(element_id, methodology)
             elif control_type == "elementParamValue":
-                tech_card = controller.getElementParamsValues(payload.get("idElement", 1), methodology)
+                tech_card = controller.getElementParamsValues(element_id, methodology)
             elif control_type == "updateTechCard":
-                tech_card = controller.updateTechCard(payload.get("techCard", {}))
+                tech_card = controller.updateTechCard(request_payload.get("techCard", {}))
             elif control_type == "methodologies":
                 methodologies = controller.getMethodologies()
                 tech_card = {
@@ -48,7 +60,7 @@ def create_adapter(controller: IControllers,):
                     ]
                 }
             elif control_type == "createParamOption":
-                tech_card = controller.createParamOption(payload)
+                tech_card = controller.createParamOption(request_payload)
             else:
                 return {}
 
@@ -57,7 +69,20 @@ def create_adapter(controller: IControllers,):
                 return tech_card.serialise()
             return tech_card
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            print(
+                "[adapter] Request failed: "
+                f"control_type={control_type}, methodology={methodology}, "
+                f"idElement={element_id}, type={element_type}, "
+                f"payload_keys={list(request_payload.keys())}. Error: {e}"
+            )
+            traceback.print_exc()
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    f"{control_type} failed for methodology={methodology}, "
+                    f"idElement={element_id}. See backend log for traceback."
+                ),
+            )
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
     return adapter

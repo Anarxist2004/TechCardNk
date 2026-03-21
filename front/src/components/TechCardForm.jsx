@@ -22,6 +22,8 @@ const GAZPROM_METHODOLOGY_NAME = 'Газпром';
 const GAZPROM_2_METHODOLOGY_ID = '2';
 const DISPLAY_MODE_NUMBER_ONLY = 'number_only';
 const DISPLAY_MODE_IMAGE_FULL = 'image_full';
+const DISPLAY_MODE_SECTION_HEADER = 'section_header';
+const DISPLAY_MODE_OPERATIONS_ROW = 'operations_row';
 const GAZPROM_SCHEME_PARAM_KEY = '6.1';
 const DEFAULT_ACTIVE_TAB = 'overview';
 
@@ -219,6 +221,88 @@ const resolveImageSrc = (imageSrc) => {
   return normalizedSrc;
 };
 
+const isImageParam = (param) => Boolean(
+  param?.image
+  || (
+    param?.value
+    && typeof param.value === 'object'
+    && !Array.isArray(param.value)
+    && param.value.image
+  ),
+);
+
+const isSectionHeaderParam = (param) => param?.displayMode === DISPLAY_MODE_SECTION_HEADER;
+
+const isOperationsRowParam = (param) => param?.displayMode === DISPLAY_MODE_OPERATIONS_ROW;
+
+const isReadOnlyParam = (param) => Boolean(param?.readOnly) || isSectionHeaderParam(param) || isOperationsRowParam(param);
+
+const isEditableParam = (param) => !isReadOnlyParam(param) && !isImageParam(param);
+
+const normalizeStaticValue = (value) => {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(normalizeStaticValue).filter(Boolean).join('\n');
+  }
+
+  if (typeof value === 'object') {
+    if (value.image) {
+      return '';
+    }
+
+    if (value.name !== undefined && value.name !== null) {
+      return String(value.name).trim();
+    }
+
+    if (value.value !== undefined && value.value !== null && typeof value.value !== 'object') {
+      return String(value.value).trim();
+    }
+
+    return Object.entries(value)
+      .filter(([key]) => key !== 'image')
+      .map(([key, nestedValue]) => {
+        const text = normalizeStaticValue(nestedValue);
+        return text ? `${key}: ${text}` : '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  return String(value).trim();
+};
+
+const getReadOnlyParamValue = (param, compositeKey, values) => {
+  const hasOverrideValue = Object.prototype.hasOwnProperty.call(values, compositeKey);
+  const overrideValue = values[compositeKey];
+  const sourceValue = hasOverrideValue && overrideValue !== '' && overrideValue !== null && overrideValue !== undefined
+    ? overrideValue
+    : param.value;
+
+  return normalizeStaticValue(sourceValue);
+};
+
+const getOperationsRowValue = (param) => {
+  const rawValue = (param?.value && typeof param.value === 'object' && !Array.isArray(param.value))
+    ? param.value
+    : {};
+
+  return {
+    content: normalizeStaticValue(rawValue.content),
+    equipment: normalizeStaticValue(rawValue.equipment),
+  };
+};
+
 const buildFormStateFromBlocks = (blocks = []) => {
   const values = {};
   const selectedIds = {};
@@ -226,7 +310,9 @@ const buildFormStateFromBlocks = (blocks = []) => {
   blocks.forEach((block) => {
     block.params.forEach((param) => {
       const compositeKey = `${block.id}.${param.id}`;
-      values[compositeKey] = getInputValueFromParam(param, '');
+      if (isEditableParam(param)) {
+        values[compositeKey] = getInputValueFromParam(param, '');
+      }
 
       const selectedId = getSelectedIdFromParam(param);
       if (selectedId !== null) {
@@ -243,6 +329,10 @@ const buildStandardValuesCacheFromBlocks = (blocks = []) => {
 
   blocks.forEach((block) => {
     block.params.forEach((param) => {
+      if (!isEditableParam(param)) {
+        return;
+      }
+
       const compositeKey = `${block.id}.${param.id}`;
       const optionValues = normalizeOptionValues(param.options);
       const rawValue = param.value;
@@ -535,9 +625,92 @@ const TableRowInput = ({
   );
 };
 
+const ReadOnlyTableRow = ({ compositeKey, param, value }) => {
+  if (isSectionHeaderParam(param)) {
+    return (
+      <tr className="border-b border-[#646C89]/20 bg-[#646C89]/10">
+        <td colSpan={2} className="py-2 px-2 text-sm font-semibold text-white">
+          {param.name}
+        </td>
+      </tr>
+    );
+  }
+
+  const isNumberOnlyMode = param.displayMode === DISPLAY_MODE_NUMBER_ONLY;
+
+  return (
+    <tr className="border-b border-[#646C89]/20">
+      {!isNumberOnlyMode && (
+        <td
+          className="py-2 px-2 text-white text-sm align-top"
+          style={{ width: '300px', minWidth: '300px', maxWidth: '300px' }}
+        >
+          <span className="text-[#D97B54] font-mono mr-2">{compositeKey}</span>
+          {param.name}
+        </td>
+      )}
+      <td
+        colSpan={isNumberOnlyMode ? 2 : undefined}
+        className="py-2 px-2 align-top"
+        style={isNumberOnlyMode ? undefined : { width: '400px', minWidth: '400px' }}
+      >
+        <div className={isNumberOnlyMode ? 'flex items-start gap-3 w-full' : 'whitespace-pre-wrap text-sm text-white'}>
+          {isNumberOnlyMode && (
+            <span className="text-[#D97B54] font-mono text-sm shrink-0">{compositeKey}</span>
+          )}
+          <div className="whitespace-pre-wrap text-sm text-white">{value || '-'}</div>
+        </div>
+      </td>
+    </tr>
+  );
+};
+
+const OperationsTable = ({ block }) => {
+  const operationRows = (block?.params || []).filter(isOperationsRowParam);
+
+  if (operationRows.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse table-fixed">
+        <thead>
+          <tr className="border-b border-[#646C89]/30">
+            <th className="w-[24%] py-2 px-2 text-left text-[#646C89] text-xs font-medium">Наименование операции</th>
+            <th className="w-[50%] py-2 px-2 text-left text-[#646C89] text-xs font-medium">Содержание операции, основные требования</th>
+            <th className="w-[26%] py-2 px-2 text-left text-[#646C89] text-xs font-medium">Оборудование и инструмент</th>
+          </tr>
+        </thead>
+        <tbody>
+          {operationRows.map((param) => {
+            const { content, equipment } = getOperationsRowValue(param);
+            const rowKey = `${block.id}.${param.id}`;
+
+            return (
+              <tr key={rowKey} className="border-b border-[#646C89]/20 align-top">
+                <td className="py-2 px-2 text-sm text-white whitespace-pre-wrap">
+                  {param.name || '-'}
+                </td>
+                <td className="py-2 px-2 text-sm text-white whitespace-pre-wrap">
+                  {content || '-'}
+                </td>
+                <td className="py-2 px-2 text-sm text-white whitespace-pre-wrap">
+                  {equipment || '-'}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
 const TechCardForm = () => {
   const [blocks, setBlocks] = useState([]);
   const [loadingBlocks, setLoadingBlocks] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [selectedMethodology, setSelectedMethodology] = useState(GAZPROM_METHODOLOGY_ID);
   const [objectType, setObjectType] = useState(null);
   const [paramValues, setParamValues] = useState({});
@@ -576,20 +749,25 @@ const TechCardForm = () => {
     setSelectedOptionIds(selectedIds);
     setStandardValuesCache(buildStandardValuesCacheFromBlocks(nextBlocks));
     setActiveTabId(nextTabs[0]?.id || DEFAULT_ACTIVE_TAB);
+    setLoadError('');
   };
 
   const loadTechCard = async (methodologyId = selectedMethodology) => {
-    const hadLoadedBlocks = blocks.length > 0;
     setLoadingBlocks(true);
+    setLoadError('');
 
     try {
       const data = await api.getFullTechCard(methodologyId);
       applyLoadedTechCard(data);
     } catch (error) {
       console.error('Ошибка загрузки техкарты:', error);
-      if (!hadLoadedBlocks) {
-        resetLoadedTechCard();
-      }
+      const failedMethodology = METHODOLOGY_OPTIONS.find((option) => option.id === String(methodologyId));
+      resetLoadedTechCard();
+      setLoadError(
+        failedMethodology
+          ? `Не удалось загрузить техкарту для методологии "${failedMethodology.label}".`
+          : 'Не удалось загрузить техкарту.',
+      );
     } finally {
       setLoadingBlocks(false);
     }
@@ -697,28 +875,28 @@ const TechCardForm = () => {
   };
 
   const isBlockComplete = (block) => {
-    if (!block.params || block.params.length === 0) {
+    const progressParams = (block.params || []).filter(isEditableParam);
+
+    if (progressParams.length === 0) {
       return true;
     }
 
-    return block.params.every((param) => {
+    return progressParams.every((param) => {
       const compositeKey = `${block.id}.${param.id}`;
       const value = paramValues[compositeKey];
-      return (value && value.trim() !== '') || param.image;
+      return value && value.trim() !== '';
     });
   };
 
   const getBlockProgress = (block) => {
-    if (!block.params || block.params.length === 0) {
+    const progressParams = (block.params || []).filter(isEditableParam);
+
+    if (progressParams.length === 0) {
       return { filled: 0, total: 0 };
     }
 
-    const total = block.params.filter((param) => !param.image).length;
-    const filled = block.params.filter((param) => {
-      if (param.image) {
-        return false;
-      }
-
+    const total = progressParams.length;
+    const filled = progressParams.filter((param) => {
       const compositeKey = `${block.id}.${param.id}`;
       const value = paramValues[compositeKey];
       return value && value.trim() !== '';
@@ -914,6 +1092,10 @@ const TechCardForm = () => {
   };
 
   const getStandardValuesForParam = (param, blockId) => {
+    if (!isEditableParam(param)) {
+      return [];
+    }
+
     const compositeKey = `${blockId}.${param.id}`;
 
     if (standardValuesCache[compositeKey]?.length > 0) {
@@ -1038,6 +1220,10 @@ const TechCardForm = () => {
 
     blocks.forEach((block) => {
       block.params.forEach((param) => {
+        if (!isEditableParam(param)) {
+          return;
+        }
+
         const compositeKey = `${block.id}.${param.id}`;
         const value = paramValues[compositeKey] || '';
         const validation = validateByType(value, getParamTypeData(param));
@@ -1100,8 +1286,10 @@ const TechCardForm = () => {
 
         {!loadingBlocks && !hasBlocks && (
           <div className="bg-[#0C1515]/50 rounded-xl p-5 text-center">
-            <p className="text-white text-lg">Техкарта не загрузилась.</p>
-            <p className="text-[#646C89] mt-2">Попробуйте перезагрузить данные ещё раз.</p>
+            <p className="text-white text-lg">
+              {loadError || 'Техкарта не загрузилась.'}
+            </p>
+            <p className="text-[#646C89] mt-2">Проверьте backend и повторите загрузку ещё раз.</p>
           </div>
         )}
 
@@ -1163,6 +1351,10 @@ const TechCardForm = () => {
               const isComplete = isBlockComplete(block);
               const progress = getBlockProgress(block);
               const blockTitlePrefix = Number.isFinite(Number(block.id)) ? block.id : blockIndex + 1;
+              const operationRows = block.params.filter(isOperationsRowParam);
+              const regularParams = block.params.filter((param) => !isOperationsRowParam(param));
+              const hasRegularParams = regularParams.length > 0;
+              const hasOperationRows = operationRows.length > 0;
 
               return (
                 <div key={block.id} className="bg-[#0C1515]/50 rounded-xl p-5">
@@ -1195,7 +1387,7 @@ const TechCardForm = () => {
 
                   {!isCollapsed && (
                     <div className="mt-4">
-                      {block.params.length > 0 ? (
+                      {hasRegularParams ? (
                         <div className="overflow-x-auto">
                           <table className="w-full border-collapse table-auto">
                             <thead>
@@ -1205,10 +1397,10 @@ const TechCardForm = () => {
                               </tr>
                             </thead>
                             <tbody>
-                              {block.params.map((param) => {
+                              {regularParams.map((param) => {
                                 const compositeKey = `${block.id}.${param.id}`;
 
-                                if (param.image || (param.value && typeof param.value === 'object' && param.value.image)) {
+                                if (isImageParam(param)) {
                                   let imageSrc = resolveImageSrc(param.image || param.value.image);
                                   const isFullImageMode = param.displayMode === DISPLAY_MODE_IMAGE_FULL;
 
@@ -1245,6 +1437,17 @@ const TechCardForm = () => {
                                   );
                                 }
 
+                                if (isReadOnlyParam(param)) {
+                                  return (
+                                    <ReadOnlyTableRow
+                                      key={compositeKey}
+                                      compositeKey={compositeKey}
+                                      param={param}
+                                      value={getReadOnlyParamValue(param, compositeKey, paramValues)}
+                                    />
+                                  );
+                                }
+
                                 return (
                                   <TableRowInput
                                     key={compositeKey}
@@ -1265,7 +1468,13 @@ const TechCardForm = () => {
                           </table>
                         </div>
                       ) : (
-                        <p className="text-[#646C89] text-center py-4">Нет параметров в этом блоке</p>
+                        <p className={`text-[#646C89] text-center py-4 ${hasOperationRows ? 'hidden' : ''}`}>Нет параметров в этом блоке</p>
+                      )}
+
+                      {hasOperationRows && (
+                        <div className={hasRegularParams ? 'mt-4' : ''}>
+                          <OperationsTable block={block} />
+                        </div>
                       )}
 
                       {(customFields[block.id] || []).length > 0 && (

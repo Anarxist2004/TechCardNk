@@ -11,6 +11,8 @@ from services.tech_card_service import TechCardService
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
+DB_DSN = "host=localhost port=5432 dbname=welding_control_db user=postgres password=admin"
+
 
 def fill_gazprom_pipeline(pipe_line: PipeLine) -> None:
     methodology_id = TechCardService.GAZPROM_METHODOLOGY
@@ -32,10 +34,10 @@ def create_pipeline() -> PipeLine:
 def main():
     repos = {
         TechCardService.GAZPROM_METHODOLOGY: PostgreDbShablovGazprom(
-            "host=localhost port=5432 dbname=welding_control_db user=postgres password=admin"
+            DB_DSN
         ),
         TechCardService.GAZPROM_OPERATIONAL_METHODOLOGY: PostgreDbShablovGazpromOperational(
-            "host=localhost port=5432 dbname=welding_control_db user=postgres password=admin"
+            DB_DSN
         ),
     }
     controller = ControllerWeb()

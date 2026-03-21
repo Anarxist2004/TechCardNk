@@ -1,5 +1,7 @@
 const DISPLAY_MODE_NUMBER_ONLY = 'number_only';
 const DISPLAY_MODE_IMAGE_FULL = 'image_full';
+const DISPLAY_MODE_SECTION_HEADER = 'section_header';
+const DISPLAY_MODE_OPERATIONS_ROW = 'operations_row';
 
 const escapeHtml = (value = '') => String(value)
   .replace(/&/g, '&amp;')
@@ -126,6 +128,8 @@ const getParamImageSrc = (param) => {
   return '';
 };
 
+const isOperationsRowParam = (param) => param?.displayMode === DISPLAY_MODE_OPERATIONS_ROW;
+
 const readBlobAsDataUrl = (blob) => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => resolve(reader.result);
@@ -205,6 +209,18 @@ const buildParamRowHtml = (blockId, param, paramValues, imageSrcMap) => {
   const paramNumber = `${blockId}.${param.id}`;
   const imageSrc = imageSrcMap[compositeKey] || '';
 
+  if (param.displayMode === DISPLAY_MODE_OPERATIONS_ROW) {
+    return '';
+  }
+
+  if (param.displayMode === DISPLAY_MODE_SECTION_HEADER) {
+    return `
+      <tr class="section-row">
+        <td colspan="3">${escapeHtml(param.name || '')}</td>
+      </tr>
+    `;
+  }
+
   if (imageSrc) {
     const isFullImage = param.displayMode === DISPLAY_MODE_IMAGE_FULL;
     const caption = escapeHtml(param.name || paramNumber);
@@ -282,6 +298,48 @@ const buildCustomRowsHtml = (fields = []) => {
   `;
 };
 
+const buildOperationsTableHtml = (params = []) => {
+  const operationRows = Array.isArray(params)
+    ? params.filter(isOperationsRowParam)
+    : [];
+
+  if (operationRows.length === 0) {
+    return '';
+  }
+
+  const rowsHtml = operationRows.map((param) => {
+    const value = (param?.value && typeof param.value === 'object' && !Array.isArray(param.value))
+      ? param.value
+      : {};
+
+    const content = normalizeValueText(value.content) || '-';
+    const equipment = normalizeValueText(value.equipment) || '-';
+
+    return `
+      <tr>
+        <td class="cell-name">${escapeHtml(param.name || '')}</td>
+        <td class="cell-value">${escapeHtml(content)}</td>
+        <td class="cell-value">${escapeHtml(equipment)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <table class="block-table operations-table">
+      <thead>
+        <tr>
+          <th class="operations-col-name">Наименование операции</th>
+          <th class="operations-col-content">Содержание операции, основные требования</th>
+          <th class="operations-col-equipment">Оборудование и инструмент</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+  `;
+};
+
 const buildUploadedImagesHtml = (images = []) => {
   const normalizedImages = Array.isArray(images)
     ? images.filter((image) => image && (image.exportSrc || image.preview))
@@ -309,10 +367,12 @@ const buildUploadedImagesHtml = (images = []) => {
 };
 
 const buildBlockHtml = (block, paramValues, customFields, uploadedImages, imageSrcMap) => {
-  const paramRows = block.params
+  const regularParams = (block.params || []).filter((param) => !isOperationsRowParam(param));
+  const paramRows = regularParams
     .map((param) => buildParamRowHtml(block.id, param, paramValues, imageSrcMap))
     .filter(Boolean)
     .join('');
+  const operationsTableHtml = buildOperationsTableHtml(block.params);
   const customRows = buildCustomRowsHtml(customFields[block.id] || []);
   const imagesSection = buildUploadedImagesHtml(uploadedImages[block.id] || []);
 
@@ -334,13 +394,14 @@ const buildBlockHtml = (block, paramValues, customFields, uploadedImages, imageS
     `
     : '';
 
-  const hasAnyContent = Boolean(tableHtml || imagesSection);
+  const hasAnyContent = Boolean(tableHtml || operationsTableHtml || imagesSection);
 
   return `
     <section class="techcard-block">
       <h2 class="block-title">${escapeHtml(`${block.id}. ${block.name}`)}</h2>
       ${hasAnyContent ? `
         ${tableHtml}
+        ${operationsTableHtml}
         ${imagesSection}
       ` : `
         <div class="empty-block">Нет заполненных данных.</div>
@@ -469,6 +530,18 @@ const buildWordHtml = ({
 
         .col-value {
           width: 52%;
+        }
+
+        .operations-col-name {
+          width: 24%;
+        }
+
+        .operations-col-content {
+          width: 50%;
+        }
+
+        .operations-col-equipment {
+          width: 26%;
         }
 
         .cell-number {

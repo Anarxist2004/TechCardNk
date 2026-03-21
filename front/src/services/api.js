@@ -81,6 +81,7 @@ function transformBlocksResponse(data) {
           selectedId: param.selectedId ?? null,
           canCreateOption: Boolean(param.canCreateOption),
           syncOnSelect: Boolean(param.syncOnSelect),
+          readOnly: Boolean(param.readOnly),
           image: param.image || null,
           blockId,
           blockName: block.name,

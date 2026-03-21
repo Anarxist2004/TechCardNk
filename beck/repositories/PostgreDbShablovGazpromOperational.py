@@ -1,3 +1,4 @@
+import traceback
 from typing import Any, Dict, List
 
 from repositories.PostgreDbShablovGazprom import PostgreDbShablovGazprom
@@ -7,86 +8,53 @@ from services.tech_card import TechCardData
 class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
     METHODOLOGY_ID = 2
     TYPE_NAME = "Контролируемый элемент"
-    HEADER_BLOCK_ID = 1
+
+    DISPLAY_MODE_SECTION_HEADER = "section_header"
+    DISPLAY_MODE_OPERATIONS_ROW = "operations_row"
+
+    MAIN_INFO_BLOCK_ID = 1
     OBJECT_BLOCK_ID = 2
     SOURCE_DATA_BLOCK_ID = 3
-    SCHEME_BLOCK_ID = 4
-    OPERATIONS_BLOCK_ID = 5
-    SIGNATURES_BLOCK_ID = 6
-    CONTROLLED_ELEMENT_PARAM_ID = "3"
+    OPERATIONS_BLOCK_ID = 4
+
+    MAIN_INFO_OBJECT_PARAM_ID = "5"
+    JOINT_TYPE_PARAM_ID = "1"
+    JOINT_IMAGE_PARAM_ID = "1.1"
     SCHEME_PARAM_ID = "1"
-    OBJECT_IMAGE_PARAM_ID = "90"
     SCHEME_IMAGE_PARAM_ID = "1.1"
 
     BLOCK_LAYOUT: Dict[int, Dict[str, Any]] = {
-        HEADER_BLOCK_ID: {
-            "name": "Шапка",
+        MAIN_INFO_BLOCK_ID: {
+            "name": "Основная информация тех карты",
             "fields": [
-                {"id": "1", "name": "Наименование организации"},
-                {"id": "2", "name": "Номер чертежа (эскиза)"},
-                {"id": CONTROLLED_ELEMENT_PARAM_ID, "name": "Наименование объекта", "options_key": "controlled_elements"},
-                {"id": "4", "name": "Методика контроля"},
-                {"id": "5", "name": "Нормативные документы"},
-                {"id": "6", "name": "Шифр"},
-                {"id": "7", "name": "Уровень качества"},
+                {"id": "1", "name": "ШИФР"},
+                {"id": "2", "name": "УРОВЕНЬ КАЧЕСТВА"},
+                {"id": "3", "name": "НАИМЕНОВАНИЕ ОРГАНИЗАЦИИ"},
+                {"id": "4", "name": "НОМЕР ЧЕРТЕЖА (ЭСКИЗА)"},
+                {"id": MAIN_INFO_OBJECT_PARAM_ID, "name": "НАИМЕНОВАНИЕ ОБЪЕКТА"},
+                {"id": "6", "name": "МЕТОДИКА КОНТРОЛЯ"},
+                {"id": "7", "name": "НОРМАТИВНЫЕ ДОКУМЕНТЫ"},
             ],
         },
         OBJECT_BLOCK_ID: {
             "name": "Объект контроля",
             "fields": [
-                {"id": "1", "name": "Номинальный диаметр трубы, мм"},
-                {"id": "2", "name": "Номинальная толщина стенки, S, мм"},
-                {"id": "3", "name": "Тип сварного соединения, тип сварки"},
+                {"id": JOINT_TYPE_PARAM_ID, "name": "Тип сварного соединения, тип сварки"},
             ],
         },
         SOURCE_DATA_BLOCK_ID: {
-            "name": "Исходные данные",
-            "fields": [],
-        },
-        SCHEME_BLOCK_ID: {
-            "name": "Схема просвечивания",
+            "name": "ИСХОДНЫЕ ДАННЫЕ",
             "fields": [
-                {"id": SCHEME_PARAM_ID, "name": "Схема просвечивания", "options_key": "transmission_schemes"},
+                {"id": SCHEME_PARAM_ID, "name": "СХЕМА ПРОСВЕЧИВАНИЯ"},
             ],
         },
         OPERATIONS_BLOCK_ID: {
-            "name": "Перечень операций РК",
+            "name": "ПЕРЕЧЕНЬ ОПЕРАЦИЙ РК",
             "fields": [],
-        },
-        SIGNATURES_BLOCK_ID: {
-            "name": "Подписи",
-            "fields": [
-                {"id": "1", "name": "Разработал - ФИО"},
-                {"id": "2", "name": "Разработал - Подпись"},
-                {"id": "3", "name": "Разработал - Должность, организация"},
-                {"id": "4", "name": "Разработал - Уровень квалификации, № удостоверения"},
-                {"id": "5", "name": "Утвердил - ФИО"},
-                {"id": "6", "name": "Утвердил - Подпись"},
-                {"id": "7", "name": "Утвердил - Должность, организация"},
-                {"id": "8", "name": "Утвердил - Уровень квалификации, № удостоверения"},
-            ],
         },
     }
 
-    OPTIONS_QUERIES: Dict[str, Dict[str, Any]] = {
-        "controlled_elements": {
-            "query": """
-                SELECT DISTINCT name
-                FROM controlled_elements
-                WHERE name IS NOT NULL AND name <> ''
-                ORDER BY name
-            """
-        },
-        "transmission_schemes": {
-            "query": """
-                SELECT DISTINCT reference
-                FROM transmission_schemes
-                WHERE reference IS NOT NULL AND reference <> ''
-                ORDER BY reference
-            """,
-            "key": "reference",
-        },
-    }
+    OPTIONS_QUERIES: Dict[str, Dict[str, Any]] = {}
 
     CREATE_OPTION_CONFIGS: Dict[str, Dict[str, Any]] = {}
 
@@ -104,10 +72,63 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
     def _apply_special_display_modes(self, blocks: Dict[int, Dict[str, Any]]) -> None:
         _ = blocks
 
-    def _mark_sync_on_select(self, blocks: Dict[int, Dict[str, Any]], block_id: int, param_id: str) -> None:
+    def _update_param_metadata(
+        self,
+        blocks: Dict[int, Dict[str, Any]],
+        block_id: int,
+        param_id: str,
+        **metadata: Any,
+    ) -> None:
         param = self._get_param(blocks, block_id, param_id)
-        if isinstance(param, dict):
-            param["syncOnSelect"] = True
+        if not isinstance(param, dict):
+            return
+
+        for key, value in metadata.items():
+            if value is not None:
+                param[key] = value
+
+    def _mark_sync_on_select(self, blocks: Dict[int, Dict[str, Any]], block_id: int, param_id: str) -> None:
+        self._update_param_metadata(blocks, block_id, param_id, syncOnSelect=True)
+
+    def _mark_read_only(self, blocks: Dict[int, Dict[str, Any]], block_id: int, param_id: str) -> None:
+        self._update_param_metadata(blocks, block_id, param_id, readOnly=True)
+
+    def _set_read_only_param(
+        self,
+        blocks: Dict[int, Dict[str, Any]],
+        block_id: int,
+        param_id: str,
+        name: str,
+        value: Any = "",
+        display_mode: str | None = None,
+        image: Any = None,
+    ) -> None:
+        self._set_param(
+            blocks,
+            block_id,
+            param_id,
+            name,
+            value=value,
+            image=image,
+            display_mode=display_mode,
+        )
+        self._mark_read_only(blocks, block_id, param_id)
+
+    def _set_section_header(
+        self,
+        blocks: Dict[int, Dict[str, Any]],
+        block_id: int,
+        param_id: str,
+        name: str,
+    ) -> None:
+        self._set_read_only_param(
+            blocks,
+            block_id,
+            param_id,
+            name,
+            value="",
+            display_mode=self.DISPLAY_MODE_SECTION_HEADER,
+        )
 
     def _get_controlled_element_options(self) -> List[Dict[str, str]]:
         rows = self._fetch_all_rows(
@@ -129,12 +150,22 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
 
         return options
 
+    def _get_welded_joint_type_rows(self) -> List[Dict[str, Any]]:
+        return self._fetch_all_rows(
+            """
+            SELECT id, name, "refImg" AS ref_img
+            FROM welded_joint_types
+            WHERE name IS NOT NULL AND name <> ''
+            ORDER BY name, id
+            """
+        )
+
     def _get_selected_controlled_element_id(self, source: TechCardData | Dict[int, Dict[str, Any]]) -> int | None:
-        selected_id = self._get_param_selected_id(source, self.HEADER_BLOCK_ID, self.CONTROLLED_ELEMENT_PARAM_ID)
+        selected_id = self._get_param_selected_id(source, self.MAIN_INFO_BLOCK_ID, self.MAIN_INFO_OBJECT_PARAM_ID)
         if selected_id is not None:
             return selected_id
 
-        element_name = self._get_param_value(source, self.HEADER_BLOCK_ID, self.CONTROLLED_ELEMENT_PARAM_ID)
+        element_name = self._get_param_value(source, self.MAIN_INFO_BLOCK_ID, self.MAIN_INFO_OBJECT_PARAM_ID)
         if not element_name:
             return None
 
@@ -147,6 +178,33 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
             LIMIT 1
             """,
             (element_name,),
+        )
+        if not row:
+            return None
+
+        try:
+            return int(row.get("id"))
+        except (TypeError, ValueError):
+            return None
+
+    def _get_selected_welded_joint_type_id(self, source: TechCardData | Dict[int, Dict[str, Any]]) -> int | None:
+        selected_id = self._get_param_selected_id(source, self.OBJECT_BLOCK_ID, self.JOINT_TYPE_PARAM_ID)
+        if selected_id is not None:
+            return selected_id
+
+        joint_type_name = self._get_param_value(source, self.OBJECT_BLOCK_ID, self.JOINT_TYPE_PARAM_ID)
+        if not joint_type_name:
+            return None
+
+        row = self._fetch_one_row(
+            """
+            SELECT id
+            FROM welded_joint_types
+            WHERE name = %s
+            ORDER BY id
+            LIMIT 1
+            """,
+            (joint_type_name,),
         )
         if not row:
             return None
@@ -205,6 +263,10 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
             return None
 
     def _resolve_welded_joint_type_id(self, source: TechCardData | Dict[int, Dict[str, Any]]) -> int | None:
+        selected_joint_type_id = self._get_selected_welded_joint_type_id(source)
+        if selected_joint_type_id is not None:
+            return selected_joint_type_id
+
         designation_id = self._resolve_designation_id(source)
         if designation_id is None:
             return None
@@ -315,18 +377,12 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
                 dp.designation_id,
                 dp.welded_joint_type_id,
                 wjt.name AS welded_joint_type_name,
-                wjt."refImg" AS welded_joint_ref_img,
                 wm.name AS welding_method_name,
-                wjc.name AS welded_joint_category_name,
-                rs.name AS radiation_source_name,
-                rs.focal_spot_diameter,
-                sst.name AS sensitivity_standard_type_name
+                wjc.name AS welded_joint_category_name
             FROM designation_params dp
             LEFT JOIN welded_joint_types wjt ON wjt.id = dp.welded_joint_type_id
             LEFT JOIN welding_methods wm ON wm.id = dp.welding_method_id
             LEFT JOIN welded_joint_categories wjc ON wjc.id = dp.welded_joint_category_id
-            LEFT JOIN radiation_sources rs ON rs.id = dp.radiation_source_id
-            LEFT JOIN sensitivity_standard_types sst ON sst.id = dp.sensitivity_standard_type_id
             WHERE dp.designation_id = %s
             ORDER BY dp.id
             LIMIT 1
@@ -344,54 +400,20 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
             (designation_id,),
         ) if designation_id else []
 
-        film_usage_rows = self._fetch_all_rows(
-            """
-            SELECT rft.name AS radiographic_film_type_name
-            FROM film_usage fu
-            LEFT JOIN radiographic_film_types rft ON rft.id = fu.radiographic_film_type_id
-            WHERE fu.designation_id = %s
-            ORDER BY fu.id
-            """,
-            (designation_id,),
-        ) if designation_id else []
-
-        film_loading_rows = self._fetch_all_rows(
-            """
-            SELECT flt.name AS film_loading_type_name
-            FROM film_loading_usage flu
-            LEFT JOIN film_loading_types flt ON flt.id = flu.film_loading_type_id
-            WHERE flu.designation_id = %s
-            ORDER BY flu.id
-            """,
-            (designation_id,),
-        ) if designation_id else []
-
-        engineers_rows = self._fetch_all_rows(
-            """
-            SELECT
-                id,
-                "FIO" AS fio,
-                organization,
-                "Skill level" AS skill_level
-            FROM engineers
-            ORDER BY id
-            """
-        )
-
         return {
             "element_row": element_row,
-            "drawing_number_id": drawing_number_id,
-            "designation_row": designation_row,
+            "designation_row": designation_row or {},
             "designation_id": designation_id,
-            "designation_params": designation_params,
+            "designation_params": designation_params or {},
             "dimensions_rows": dimensions_rows,
-            "film_usage_rows": film_usage_rows,
-            "film_loading_rows": film_loading_rows,
             "documentation_rows": self._get_documentation_rows(),
-            "engineers_rows": engineers_rows,
         }
 
-    def _fill_header_block(self, blocks: Dict[int, Dict[str, Any]], context: Dict[str, Any]) -> None:
+    def _fill_main_info_block(self, blocks: Dict[int, Dict[str, Any]], context: Dict[str, Any]) -> None:
+        block = self._ensure_block(blocks, self.MAIN_INFO_BLOCK_ID)
+        block["name"] = self.BLOCK_LAYOUT[self.MAIN_INFO_BLOCK_ID]["name"]
+        block["params"] = {}
+
         element_row = context.get("element_row") or {}
         designation_params = context.get("designation_params") or {}
         documentation_rows = context.get("documentation_rows") or []
@@ -401,200 +423,314 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
             self._join_rows(methodical_rows),
             self._join_rows(normative_rows),
         ]
-        methodology_value = "; ".join([part for part in methodology_parts if part])
-        controlled_element_options = self._get_controlled_element_options()
+        methodology_value = "; ".join([part for part in methodology_parts if part]) or "Газпром 2"
 
-        self._set_param(
+        self._set_read_only_param(
             blocks,
-            self.HEADER_BLOCK_ID,
+            self.MAIN_INFO_BLOCK_ID,
             "1",
-            "Наименование организации",
+            "ШИФР",
+            self._build_cipher(dimensions_rows),
+        )
+        self._set_read_only_param(
+            blocks,
+            self.MAIN_INFO_BLOCK_ID,
+            "2",
+            "УРОВЕНЬ КАЧЕСТВА",
+            self._build_quality_level(designation_params),
+        )
+        self._set_read_only_param(
+            blocks,
+            self.MAIN_INFO_BLOCK_ID,
+            "3",
+            "НАИМЕНОВАНИЕ ОРГАНИЗАЦИИ",
             element_row.get("manufacturer_name"),
         )
-        self._set_param(
+        self._set_read_only_param(
             blocks,
-            self.HEADER_BLOCK_ID,
-            "2",
-            "Номер чертежа (эскиза)",
+            self.MAIN_INFO_BLOCK_ID,
+            "4",
+            "НОМЕР ЧЕРТЕЖА (ЭСКИЗА)",
             element_row.get("drawing_number_name"),
         )
         self._set_param(
             blocks,
-            self.HEADER_BLOCK_ID,
-            self.CONTROLLED_ELEMENT_PARAM_ID,
-            "Наименование объекта",
+            self.MAIN_INFO_BLOCK_ID,
+            self.MAIN_INFO_OBJECT_PARAM_ID,
+            "НАИМЕНОВАНИЕ ОБЪЕКТА",
             element_row.get("controlled_element_name"),
-            options=controlled_element_options,
+            options=self._get_controlled_element_options(),
             selected_id=element_row.get("id"),
         )
-        self._mark_sync_on_select(blocks, self.HEADER_BLOCK_ID, self.CONTROLLED_ELEMENT_PARAM_ID)
-        self._set_param(
+        self._mark_sync_on_select(blocks, self.MAIN_INFO_BLOCK_ID, self.MAIN_INFO_OBJECT_PARAM_ID)
+        self._set_read_only_param(
             blocks,
-            self.HEADER_BLOCK_ID,
-            "4",
-            "Методика контроля",
+            self.MAIN_INFO_BLOCK_ID,
+            "6",
+            "МЕТОДИКА КОНТРОЛЯ",
             methodology_value,
         )
-        self._set_param(
+        self._set_read_only_param(
             blocks,
-            self.HEADER_BLOCK_ID,
-            "5",
-            "Нормативные документы",
+            self.MAIN_INFO_BLOCK_ID,
+            "7",
+            "НОРМАТИВНЫЕ ДОКУМЕНТЫ",
             self._join_rows(normative_rows),
         )
-        self._set_param(
-            blocks,
-            self.HEADER_BLOCK_ID,
-            "6",
-            "Шифр",
-            self._build_cipher(dimensions_rows),
+
+    def _resolve_selected_joint_type_row(
+        self,
+        context: Dict[str, Any],
+        selected_joint_type_id: int | None = None,
+        selected_joint_type_name: str | None = None,
+    ) -> tuple[List[Dict[str, Any]], Dict[str, Any] | None]:
+        joint_type_rows = self._get_welded_joint_type_rows()
+        selected_row = None
+
+        if selected_joint_type_id is not None:
+            selected_row = next(
+                (
+                    row
+                    for row in joint_type_rows
+                    if row.get("id") is not None and int(row.get("id")) == selected_joint_type_id
+                ),
+                None,
+            )
+
+        if selected_row is None and selected_joint_type_name:
+            selected_row = next(
+                (
+                    row
+                    for row in joint_type_rows
+                    if str(row.get("name") or "").strip() == str(selected_joint_type_name).strip()
+                ),
+                None,
+            )
+
+        default_joint_type_id = (context.get("designation_params") or {}).get("welded_joint_type_id")
+        if selected_row is None and default_joint_type_id is not None:
+            try:
+                selected_row = next(
+                    (
+                        row
+                        for row in joint_type_rows
+                        if row.get("id") is not None and int(row.get("id")) == int(default_joint_type_id)
+                    ),
+                    None,
+                )
+            except (TypeError, ValueError):
+                selected_row = None
+
+        if selected_row is None and joint_type_rows:
+            selected_row = joint_type_rows[0]
+
+        return joint_type_rows, selected_row
+
+    def _get_params_by_welded_joint_rows(self, welded_joint_type_id: int | None) -> List[Dict[str, Any]]:
+        if welded_joint_type_id is None:
+            return []
+
+        table_name = "params_by_welded_joint"
+        foreign_key_column = self._get_existing_column_name(
+            table_name,
+            ["welded_joint_type_id", "welded_joint_types_id", "joint_type_id", "type_id"],
         )
-        self._set_param(
-            blocks,
-            self.HEADER_BLOCK_ID,
-            "7",
-            "Уровень качества",
-            self._build_quality_level(designation_params),
+        name_column = self._get_existing_column_name(
+            table_name,
+            ["name", "param_name", "title", "label", "text"],
+        )
+        value_column = self._get_existing_column_name(
+            table_name,
+            ["val", "value", "param_value"],
+        )
+        block_column = self._get_existing_column_name(
+            table_name,
+            ["block", "block_name", "section", "group_name"],
         )
 
-    def _fill_object_block(self, blocks: Dict[int, Dict[str, Any]], context: Dict[str, Any]) -> None:
+        if not foreign_key_column or not name_column or not value_column:
+            return []
+
+        block_select = f'"{block_column}" AS block_name' if block_column else "NULL AS block_name"
+        return self._fetch_all_rows(
+            f'''
+            SELECT
+                id,
+                "{name_column}" AS param_name,
+                "{value_column}" AS param_value,
+                {block_select}
+            FROM {table_name}
+            WHERE "{foreign_key_column}" = %s
+            ORDER BY id
+            ''',
+            (welded_joint_type_id,),
+        )
+
+    def _get_object_block_param_rows(
+        self,
+        context: Dict[str, Any],
+        welded_joint_type_id: int | None,
+    ) -> List[Dict[str, Any]]:
+        params_rows = self._get_params_by_welded_joint_rows(welded_joint_type_id)
+        if params_rows:
+            return params_rows
+
+        designation_params = context.get("designation_params") or {}
+        default_joint_type_id = designation_params.get("welded_joint_type_id")
+        try:
+            default_joint_type_id = int(default_joint_type_id) if default_joint_type_id is not None else None
+        except (TypeError, ValueError):
+            default_joint_type_id = None
+
+        # In the current schema there is no params_by_welded_joint table.
+        # Fall back to designation-linked data only for the designation's own
+        # welded joint type so we do not show stale dimensions for another type
+        # picked manually in the selector.
+        if (
+            welded_joint_type_id is None
+            or default_joint_type_id is None
+            or welded_joint_type_id != default_joint_type_id
+        ):
+            return []
+
+        fallback_rows: List[Dict[str, Any]] = []
+        welding_method_name = str(designation_params.get("welding_method_name") or "").strip()
+        if welding_method_name:
+            fallback_rows.append(
+                {
+                    "id": "welding_method",
+                    "param_name": "Тип сварки",
+                    "param_value": welding_method_name,
+                    "block_name": None,
+                }
+            )
+
+        for index, row in enumerate(context.get("dimensions_rows") or [], start=1):
+            param_name = str(row.get("text") or "").strip()
+            if not param_name:
+                continue
+
+            fallback_rows.append(
+                {
+                    "id": f"dimension_{index}",
+                    "param_name": param_name,
+                    "param_value": row.get("value"),
+                    "block_name": None,
+                }
+            )
+
+        return fallback_rows
+
+    def _fill_object_block(
+        self,
+        blocks: Dict[int, Dict[str, Any]],
+        context: Dict[str, Any],
+        selected_joint_type_id: int | None = None,
+        selected_joint_type_name: str | None = None,
+    ) -> None:
         block = self._ensure_block(blocks, self.OBJECT_BLOCK_ID)
         block["name"] = self.BLOCK_LAYOUT[self.OBJECT_BLOCK_ID]["name"]
         block["params"] = {}
 
-        designation_params = context.get("designation_params") or {}
-        dimensions_rows = context.get("dimensions_rows") or []
-        used_indexes: set[int] = set()
-
-        nominal_diameter = self._find_dimension_value(dimensions_rows, ["диаметр", "труб"], used_indexes)
-        wall_thickness = self._find_dimension_value(dimensions_rows, ["толщ", "стенк"], used_indexes)
-
-        joint_description_parts = [
-            str(designation_params.get("welded_joint_type_name") or "").strip(),
-            str(designation_params.get("welding_method_name") or "").strip(),
+        joint_type_rows, selected_row = self._resolve_selected_joint_type_row(
+            context,
+            selected_joint_type_id=selected_joint_type_id,
+            selected_joint_type_name=selected_joint_type_name,
+        )
+        joint_type_options = [
+            {"id": str(row.get("id")), "name": str(row.get("name"))}
+            for row in joint_type_rows
+            if row.get("id") is not None and row.get("name")
         ]
-        joint_description = ". ".join([part for part in joint_description_parts if part])
+        selected_joint_type_value = str(selected_row.get("name") or "") if selected_row else ""
 
-        self._set_param(blocks, self.OBJECT_BLOCK_ID, "1", "Номинальный диаметр трубы, мм", nominal_diameter)
-        self._set_param(blocks, self.OBJECT_BLOCK_ID, "2", "Номинальная толщина стенки, S, мм", wall_thickness)
-        self._set_param(blocks, self.OBJECT_BLOCK_ID, "3", "Тип сварного соединения, тип сварки", joint_description)
+        self._set_param(
+            blocks,
+            self.OBJECT_BLOCK_ID,
+            self.JOINT_TYPE_PARAM_ID,
+            "Тип сварного соединения, тип сварки",
+            selected_joint_type_value,
+            options=joint_type_options,
+            selected_id=selected_row.get("id") if selected_row else None,
+        )
+        self._mark_sync_on_select(blocks, self.OBJECT_BLOCK_ID, self.JOINT_TYPE_PARAM_ID)
 
-        next_param_index = 4
-        for index, row in enumerate(dimensions_rows):
-            if index in used_indexes:
-                continue
-
-            param_name = str(row.get("text") or "").strip()
-            value = row.get("value")
-            if not param_name and value in (None, ""):
-                continue
-
-            self._set_param(
-                blocks,
-                self.OBJECT_BLOCK_ID,
-                str(next_param_index),
-                param_name or f"Параметр {next_param_index}",
-                value,
-            )
-            next_param_index += 1
-
-        image_path = self._normalise_res_path(designation_params.get("welded_joint_ref_img"))
+        image_path = self._normalise_res_path(selected_row.get("ref_img") if selected_row else None)
         if image_path:
-            self._set_param(
+            self._set_read_only_param(
                 blocks,
                 self.OBJECT_BLOCK_ID,
-                self.OBJECT_IMAGE_PARAM_ID,
+                self.JOINT_IMAGE_PARAM_ID,
                 "Схема сварного соединения",
                 image=image_path,
                 display_mode=self.DISPLAY_MODE_IMAGE_FULL,
             )
 
-    def _normalise_named_value(self, value: Any) -> str:
-        return str(value or "").strip().lower()
+        selected_joint_type_row_id = selected_row.get("id") if selected_row else None
+        try:
+            selected_joint_type_row_id = int(selected_joint_type_row_id) if selected_joint_type_row_id is not None else None
+        except (TypeError, ValueError):
+            selected_joint_type_row_id = None
 
-    def _append_named_row(
-        self,
-        blocks: Dict[int, Dict[str, Any]],
-        block_id: int,
-        next_index: int,
-        used_names: set[str],
-        name: str,
-        value: Any,
-    ) -> int:
-        normalised_name = self._normalise_named_value(name)
-        normalised_value = self._normalise_value(value)
+        params_rows = self._get_object_block_param_rows(context, selected_joint_type_row_id)
+        rows_without_group: List[Dict[str, Any]] = []
+        grouped_rows: Dict[str, List[Dict[str, Any]]] = {}
+        group_order: List[str] = []
 
-        if not normalised_name or normalised_name in used_names or normalised_value in (None, ""):
-            return next_index
+        for row in params_rows:
+            group_name = str(row.get("block_name") or "").strip()
+            if not group_name:
+                rows_without_group.append(row)
+                continue
 
-        used_names.add(normalised_name)
-        self._set_param(blocks, block_id, str(next_index), name, normalised_value)
-        return next_index + 1
+            if group_name not in grouped_rows:
+                grouped_rows[group_name] = []
+                group_order.append(group_name)
+            grouped_rows[group_name].append(row)
 
-    def _fill_source_data_block(
-        self,
-        blocks: Dict[int, Dict[str, Any]],
-        context: Dict[str, Any],
-        selected_scheme_row: Dict[str, Any] | None,
-    ) -> None:
-        block = self._ensure_block(blocks, self.SOURCE_DATA_BLOCK_ID)
-        block["name"] = self.BLOCK_LAYOUT[self.SOURCE_DATA_BLOCK_ID]["name"]
-        block["params"] = {}
-
-        designation_params = context.get("designation_params") or {}
-        film_usage_rows = context.get("film_usage_rows") or []
-        film_loading_rows = context.get("film_loading_rows") or []
-        used_names: set[str] = set()
-        next_param_index = 1
-
-        if selected_scheme_row and selected_scheme_row.get("id") is not None:
-            scheme_params_rows = self._fetch_all_rows(
-                """
-                SELECT name, val
-                FROM params_transmission_scheme
-                WHERE transmission_schemes_id = %s
-                ORDER BY id
-                """,
-                (selected_scheme_row["id"],),
-            )
-
-            for row in scheme_params_rows:
-                param_name = str(row.get("name") or "").strip()
-                param_value = row.get("val")
-                next_param_index = self._append_named_row(
-                    blocks,
-                    self.SOURCE_DATA_BLOCK_ID,
-                    next_param_index,
-                    used_names,
-                    param_name,
-                    param_value,
-                )
-
-        supplemental_rows = [
-            ("ИИИ", designation_params.get("radiation_source_name")),
-            ("Размер фокусного пятна ИИИ, мм", designation_params.get("focal_spot_diameter")),
-            ("Тип и номер эталона чувствительности", designation_params.get("sensitivity_standard_type_name")),
-            ("Тип радиографической пленки", self._join_rows(film_usage_rows, "radiographic_film_type_name")),
-            ("Тип загрузки пленки", self._join_rows(film_loading_rows, "film_loading_type_name")),
-        ]
-
-        for name, value in supplemental_rows:
-            next_param_index = self._append_named_row(
+        next_param_index = 2
+        for row in rows_without_group:
+            param_name = str(row.get("param_name") or "").strip()
+            if not param_name:
+                continue
+            self._set_read_only_param(
                 blocks,
-                self.SOURCE_DATA_BLOCK_ID,
-                next_param_index,
-                used_names,
-                name,
-                value,
+                self.OBJECT_BLOCK_ID,
+                str(next_param_index),
+                param_name,
+                row.get("param_value"),
             )
+            next_param_index += 1
+
+        for group_name in group_order:
+            group_param_id = str(next_param_index)
+            self._set_section_header(
+                blocks,
+                self.OBJECT_BLOCK_ID,
+                group_param_id,
+                group_name,
+            )
+            next_param_index += 1
+
+            for row_index, row in enumerate(grouped_rows[group_name], start=1):
+                param_name = str(row.get("param_name") or "").strip()
+                if not param_name:
+                    continue
+                self._set_read_only_param(
+                    blocks,
+                    self.OBJECT_BLOCK_ID,
+                    f"{group_param_id}.{row_index}",
+                    param_name,
+                    row.get("param_value"),
+                )
 
     def _resolve_selected_scheme_row(
         self,
-        blocks: Dict[int, Dict[str, Any]],
+        source: TechCardData | Dict[int, Dict[str, Any]],
         selected_scheme_id: int | None = None,
         selected_reference: str | None = None,
     ) -> tuple[List[Dict[str, Any]], Dict[str, Any] | None]:
-        scheme_rows = self._get_transmission_scheme_rows(blocks)
+        scheme_rows = self._get_transmission_scheme_rows(source)
         selected_row = None
 
         if selected_scheme_id is not None:
@@ -622,44 +758,77 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
 
         return scheme_rows, selected_row
 
-    def _fill_scheme_block(
+    def _fill_source_data_block(
         self,
         blocks: Dict[int, Dict[str, Any]],
-        scheme_rows: List[Dict[str, Any]],
-        selected_row: Dict[str, Any] | None,
+        selected_scheme_id: int | None = None,
+        selected_scheme_reference: str | None = None,
     ) -> None:
-        block = self._ensure_block(blocks, self.SCHEME_BLOCK_ID)
-        block["name"] = self.BLOCK_LAYOUT[self.SCHEME_BLOCK_ID]["name"]
+        block = self._ensure_block(blocks, self.SOURCE_DATA_BLOCK_ID)
+        block["name"] = self.BLOCK_LAYOUT[self.SOURCE_DATA_BLOCK_ID]["name"]
         block["params"] = {}
 
+        scheme_rows, selected_row = self._resolve_selected_scheme_row(
+            blocks,
+            selected_scheme_id=selected_scheme_id,
+            selected_scheme_reference=selected_scheme_reference,
+        )
         scheme_options = [
             {"id": str(row.get("id")), "name": str(row.get("reference"))}
             for row in scheme_rows
             if row.get("id") is not None and row.get("reference")
         ]
-        selected_value = str(selected_row.get("reference")) if selected_row else ""
+        selected_scheme_value = str(selected_row.get("reference") or "") if selected_row else ""
 
         self._set_param(
             blocks,
-            self.SCHEME_BLOCK_ID,
+            self.SOURCE_DATA_BLOCK_ID,
             self.SCHEME_PARAM_ID,
-            "Схема просвечивания",
-            selected_value,
+            "СХЕМА ПРОСВЕЧИВАНИЯ",
+            selected_scheme_value,
             options=scheme_options,
             selected_id=selected_row.get("id") if selected_row else None,
         )
-        self._mark_sync_on_select(blocks, self.SCHEME_BLOCK_ID, self.SCHEME_PARAM_ID)
+        self._mark_sync_on_select(blocks, self.SOURCE_DATA_BLOCK_ID, self.SCHEME_PARAM_ID)
 
         image_path = self._get_transmission_scheme_image_path(selected_row)
         if image_path:
-            self._set_param(
+            self._set_read_only_param(
                 blocks,
-                self.SCHEME_BLOCK_ID,
+                self.SOURCE_DATA_BLOCK_ID,
                 self.SCHEME_IMAGE_PARAM_ID,
                 "Схема просвечивания",
                 image=image_path,
                 display_mode=self.DISPLAY_MODE_IMAGE_FULL,
             )
+
+        selected_scheme_row_id = selected_row.get("id") if selected_row else None
+        if selected_scheme_row_id is None:
+            return
+
+        scheme_params_rows = self._fetch_all_rows(
+            """
+            SELECT name, val
+            FROM params_transmission_scheme
+            WHERE transmission_schemes_id = %s
+            ORDER BY id
+            """,
+            (selected_scheme_row_id,),
+        )
+
+        next_param_index = 2
+        for row in scheme_params_rows:
+            param_name = str(row.get("name") or "").strip()
+            if not param_name:
+                continue
+            self._set_read_only_param(
+                blocks,
+                self.SOURCE_DATA_BLOCK_ID,
+                str(next_param_index),
+                param_name,
+                row.get("val"),
+            )
+            next_param_index += 1
 
     def _collect_operation_lines(self, payload: Any, default_step: str) -> List[str]:
         if payload in (None, "", [], {}):
@@ -722,118 +891,132 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
 
         return [f"{default_step} {scalar_value}".strip()]
 
-    def _operation_sort_key(self, raw_value: Any) -> List[int]:
-        return [
-            int(part) if str(part).isdigit() else 0
-            for part in str(raw_value or "").split(".")
-        ]
-
-    def _get_operation_sections(self, designation_id: Any) -> List[Dict[str, str]]:
-        if not designation_id:
-            return []
-
-        rows = self._fetch_all_rows(
-            """
-            SELECT
-                tos.id AS sequence_id,
-                tos.operation_index,
-                tos.operation_name,
-                oc.id AS operation_content_id,
-                oc.content AS operation_content,
-                eo.id AS equipment_id,
-                eo.list AS equipment_list
-            FROM control_terms ct
-            INNER JOIN tech_operation_sequences tos ON tos.control_term_id = ct.id
-            LEFT JOIN operation o ON LOWER(TRIM(o.name)) = LOWER(TRIM(tos.operation_name))
-            LEFT JOIN operation_content oc ON oc.id_operation = o.id
-            LEFT JOIN equipment_operation eo ON eo.id_operation_content = oc.id
-            WHERE ct.designation_id = %s
-            ORDER BY ct.id, tos.operation_index, tos.id, oc.id, eo.id
-            """,
-            (designation_id,),
+    def _resolve_operation_name(self, row: Dict[str, Any]) -> str:
+        candidates = (
+            row.get("operation_table_name"),
+            row.get("sequence_operation_name"),
         )
 
-        sections: Dict[str, Dict[str, Any]] = {}
-        section_order: List[str] = []
+        for candidate in candidates:
+            normalised = str(candidate or "").strip()
+            if normalised:
+                return normalised
 
-        for row in rows:
-            section_key = str(row.get("sequence_id") or "").strip()
-            if not section_key:
-                section_key = str(len(section_order) + 1)
+        return "Операция"
 
-            if section_key not in sections:
-                sections[section_key] = {
-                    "operation_index": str(row.get("operation_index") or "").strip(),
-                    "operation_name": str(row.get("operation_name") or "").strip(),
-                    "contents": {},
-                    "equipment": [],
-                }
-                section_order.append(section_key)
+    def _append_unique_text(self, target: List[str], value: Any) -> None:
+        normalised = str(value or "").strip()
+        if normalised and normalised not in target:
+            target.append(normalised)
 
-            section = sections[section_key]
-            content_id = row.get("operation_content_id")
-            if content_id is not None:
-                content_key = str(content_id)
-                if content_key not in section["contents"]:
-                    section["contents"][content_key] = {
-                        "content": row.get("operation_content"),
-                        "equipment": [],
-                    }
-
-                equipment_value = str(row.get("equipment_list") or "").strip()
-                if equipment_value and equipment_value not in section["contents"][content_key]["equipment"]:
-                    section["contents"][content_key]["equipment"].append(equipment_value)
-            else:
-                equipment_value = str(row.get("equipment_list") or "").strip()
-                if equipment_value and equipment_value not in section["equipment"]:
-                    section["equipment"].append(equipment_value)
-
-        result: List[Dict[str, str]] = []
-        for section_key in sorted(section_order, key=lambda key: self._operation_sort_key(sections[key]["operation_index"] or key)):
-            section = sections[section_key]
-            operation_index = section["operation_index"]
-            operation_name = section["operation_name"] or "Операция"
-            content_lines: List[str] = []
-            equipment_items: List[str] = list(section["equipment"])
-
-            sorted_contents = sorted(
-                section["contents"].items(),
-                key=lambda item: int(item[0]) if item[0].isdigit() else 0,
+    def _fetch_operation_order_rows(self, designation_id: Any) -> List[Dict[str, Any]]:
+        if designation_id:
+            rows = self._fetch_all_rows(
+                """
+                SELECT
+                    tos.id AS sequence_id,
+                    tos.operation_index,
+                    tos.operation_name AS sequence_operation_name,
+                    o.id AS operation_id,
+                    o.name AS operation_table_name
+                FROM control_terms ct
+                INNER JOIN tech_operation_sequences tos ON tos.control_term_id = ct.id
+                LEFT JOIN operation o ON LOWER(TRIM(o.name)) = LOWER(TRIM(tos.operation_name))
+                WHERE ct.designation_id = %s
+                ORDER BY ct.id, tos.operation_index, tos.id, o.id
+                """,
+                (designation_id,),
             )
+            if rows:
+                return rows
 
-            for content_number, (_, content_data) in enumerate(sorted_contents, start=1):
+        return self._fetch_all_rows(
+            """
+            SELECT
+                NULL::integer AS sequence_id,
+                NULL::text AS operation_index,
+                name AS sequence_operation_name,
+                id AS operation_id,
+                name AS operation_table_name
+            FROM operation
+            ORDER BY id
+            """
+        )
+
+    def _fetch_operation_content_rows(self, operation_id: int | None) -> List[Dict[str, Any]]:
+        if operation_id is None:
+            return []
+
+        return self._fetch_all_rows(
+            """
+            SELECT id, content
+            FROM operation_content
+            WHERE id_operation = %s
+            ORDER BY id
+            """,
+            (operation_id,),
+        )
+
+    def _fetch_equipment_rows(self, operation_content_id: int | None) -> List[Dict[str, Any]]:
+        if operation_content_id is None:
+            return []
+
+        return self._fetch_all_rows(
+            """
+            SELECT id, list AS equipment_list
+            FROM equipment_operation
+            WHERE id_operation_content = %s
+            ORDER BY id
+            """,
+            (operation_content_id,),
+        )
+
+    def _get_operation_rows(self, designation_id: Any) -> List[Dict[str, Any]]:
+        result: List[Dict[str, Any]] = []
+        ordered_rows = self._fetch_operation_order_rows(designation_id)
+
+        for fallback_index, row in enumerate(ordered_rows, start=1):
+            operation_index = str(row.get("operation_index") or "").strip()
+            operation_name = self._resolve_operation_name(row)
+
+            operation_id = row.get("operation_id")
+            try:
+                operation_id = int(operation_id) if operation_id is not None else None
+            except (TypeError, ValueError):
+                operation_id = None
+
+            content_lines: List[str] = []
+            equipment_items: List[str] = []
+            content_rows = self._fetch_operation_content_rows(operation_id)
+
+            for content_index, content_row in enumerate(content_rows, start=1):
                 content_lines.extend(
                     self._render_operation_content(
-                        content_data.get("content"),
+                        content_row.get("content"),
                         operation_index,
-                        content_number,
+                        content_index,
                     )
                 )
 
-                for equipment_value in content_data.get("equipment", []):
-                    if equipment_value not in equipment_items:
-                        equipment_items.append(equipment_value)
+                content_row_id = content_row.get("id")
+                try:
+                    content_row_id = int(content_row_id) if content_row_id is not None else None
+                except (TypeError, ValueError):
+                    content_row_id = None
 
-            if not content_lines and operation_name:
-                content_lines.append(operation_name)
+                for equipment_row in self._fetch_equipment_rows(content_row_id):
+                    self._append_unique_text(equipment_items, equipment_row.get("equipment_list"))
 
             section_name = operation_name
-            if operation_index and not section_name.startswith(operation_index):
+            if operation_index and section_name and not section_name.startswith(operation_index):
                 section_name = f"{operation_index} {section_name}"
-
-            section_value_parts: List[str] = []
-            if content_lines:
-                section_value_parts.append("\n".join(content_lines))
-            if equipment_items:
-                section_value_parts.append(
-                    "Оборудование и инструмент:\n- " + "\n- ".join(equipment_items)
-                )
 
             result.append(
                 {
-                    "param_id": operation_index or str(len(result) + 1),
-                    "name": section_name,
-                    "value": "\n\n".join([part for part in section_value_parts if part]).strip(),
+                    "param_id": operation_index or str(fallback_index),
+                    "name": section_name or f"Операция {fallback_index}",
+                    "content": "\n".join(content_lines).strip(),
+                    "equipment": "\n".join(f"- {item}" for item in equipment_items).strip(),
                 }
             )
 
@@ -859,63 +1042,53 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
         block["params"] = {}
 
         used_ids: set[str] = set()
-        for section in self._get_operation_sections(designation_id):
-            param_id = self._allocate_operation_param_id(section.get("param_id", ""), used_ids)
+        for row in self._get_operation_rows(designation_id):
+            param_id = self._allocate_operation_param_id(row.get("param_id", ""), used_ids)
             self._set_param(
                 blocks,
                 self.OPERATIONS_BLOCK_ID,
                 param_id,
-                section.get("name") or f"Операция {param_id}",
-                section.get("value") or "",
+                row.get("name") or f"Операция {param_id}",
+                value={
+                    "content": row.get("content") or "",
+                    "equipment": row.get("equipment") or "",
+                },
+                display_mode=self.DISPLAY_MODE_OPERATIONS_ROW,
             )
+            self._mark_read_only(blocks, self.OPERATIONS_BLOCK_ID, param_id)
 
-    def _fill_signatures_block(self, blocks: Dict[int, Dict[str, Any]], engineers_rows: List[Dict[str, Any]]) -> None:
-        block = self._ensure_block(blocks, self.SIGNATURES_BLOCK_ID)
-        block["name"] = self.BLOCK_LAYOUT[self.SIGNATURES_BLOCK_ID]["name"]
-        block["params"] = {}
-
-        developer = engineers_rows[0] if len(engineers_rows) > 0 else {}
-        approver = engineers_rows[1] if len(engineers_rows) > 1 else {}
-
-        self._set_param(blocks, self.SIGNATURES_BLOCK_ID, "1", "Разработал - ФИО", developer.get("fio"))
-        self._set_param(blocks, self.SIGNATURES_BLOCK_ID, "2", "Разработал - Подпись", "")
-        self._set_param(blocks, self.SIGNATURES_BLOCK_ID, "3", "Разработал - Должность, организация", developer.get("organization"))
-        self._set_param(blocks, self.SIGNATURES_BLOCK_ID, "4", "Разработал - Уровень квалификации, № удостоверения", developer.get("skill_level"))
-        self._set_param(blocks, self.SIGNATURES_BLOCK_ID, "5", "Утвердил - ФИО", approver.get("fio"))
-        self._set_param(blocks, self.SIGNATURES_BLOCK_ID, "6", "Утвердил - Подпись", "")
-        self._set_param(blocks, self.SIGNATURES_BLOCK_ID, "7", "Утвердил - Должность, организация", approver.get("organization"))
-        self._set_param(blocks, self.SIGNATURES_BLOCK_ID, "8", "Утвердил - Уровень квалификации, № удостоверения", approver.get("skill_level"))
-
-    def _preserve_block_values(
+    def _build_operational_card_blocks_safe(
         self,
-        target_blocks: Dict[int, Dict[str, Any]],
-        source: TechCardData | Dict[int, Dict[str, Any]],
-        block_id: int,
-    ) -> None:
-        source_blocks = source.params if isinstance(source, TechCardData) else source
-        source_block = source_blocks.get(block_id) or source_blocks.get(str(block_id))
-        if not isinstance(source_block, dict):
-            return
-
-        source_params = source_block.get("params", {})
-        if not isinstance(source_params, dict):
-            return
-
-        for param_id, source_param in source_params.items():
-            if not isinstance(source_param, dict):
-                continue
-
-            target_param = self._get_param(target_blocks, block_id, str(param_id))
-            if not isinstance(target_param, dict):
-                continue
-
-            source_value = source_param.get("val")
-            if source_value not in (None, ""):
-                target_param["val"] = self._normalise_value(source_value)
+        element_id: int,
+        selected_joint_type_id: int | None = None,
+        selected_joint_type_name: str | None = None,
+        selected_scheme_id: int | None = None,
+        selected_scheme_reference: str | None = None,
+    ) -> Dict[int, Dict[str, Any]]:
+        try:
+            return self._build_operational_card_blocks(
+                element_id,
+                selected_joint_type_id=selected_joint_type_id,
+                selected_joint_type_name=selected_joint_type_name,
+                selected_scheme_id=selected_scheme_id,
+                selected_scheme_reference=selected_scheme_reference,
+            )
+        except Exception as error:
+            print(
+                "[Gazprom2] Failed to build operational tech card: "
+                f"element_id={element_id}, "
+                f"selected_joint_type_id={selected_joint_type_id}, "
+                f"selected_scheme_id={selected_scheme_id}. "
+                f"Error: {error}"
+            )
+            traceback.print_exc()
+            return self._build_template_blocks()
 
     def _build_operational_card_blocks(
         self,
         element_id: int,
+        selected_joint_type_id: int | None = None,
+        selected_joint_type_name: str | None = None,
         selected_scheme_id: int | None = None,
         selected_scheme_reference: str | None = None,
     ) -> Dict[int, Dict[str, Any]]:
@@ -924,20 +1097,19 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
             return blocks
 
         context = self._fetch_element_context(element_id)
-        if not context:
-            return blocks
-
-        self._fill_header_block(blocks, context)
-        scheme_rows, selected_row = self._resolve_selected_scheme_row(
+        self._fill_main_info_block(blocks, context)
+        self._fill_object_block(
+            blocks,
+            context,
+            selected_joint_type_id=selected_joint_type_id,
+            selected_joint_type_name=selected_joint_type_name,
+        )
+        self._fill_source_data_block(
             blocks,
             selected_scheme_id=selected_scheme_id,
-            selected_reference=selected_scheme_reference,
+            selected_scheme_reference=selected_scheme_reference,
         )
-        self._fill_object_block(blocks, context)
-        self._fill_source_data_block(blocks, context, selected_row)
-        self._fill_scheme_block(blocks, scheme_rows, selected_row)
         self._fill_operations_block(blocks, context.get("designation_id"))
-        self._fill_signatures_block(blocks, context.get("engineers_rows") or [])
         return blocks
 
     def get_params_for_type(self, type_id) -> TechCardData:
@@ -953,11 +1125,11 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
         _ = type_id
         tech_card = self._create_card()
         tech_card.params = {
-            self.HEADER_BLOCK_ID: {
-                "name": self.BLOCK_LAYOUT[self.HEADER_BLOCK_ID]["name"],
+            self.MAIN_INFO_BLOCK_ID: {
+                "name": self.BLOCK_LAYOUT[self.MAIN_INFO_BLOCK_ID]["name"],
                 "params": {
-                    self.CONTROLLED_ELEMENT_PARAM_ID: {
-                        "name": "Наименование объекта",
+                    self.MAIN_INFO_OBJECT_PARAM_ID: {
+                        "name": "НАИМЕНОВАНИЕ ОБЪЕКТА",
                         "val": "",
                         "options": self._get_controlled_element_options(),
                         "typeData": "string",
@@ -971,22 +1143,23 @@ class PostgreDbShablovGazpromOperational(PostgreDbShablovGazprom):
 
     def sync_tech_card(self, tech_card: TechCardData) -> TechCardData:
         element_id = self._get_selected_controlled_element_id(tech_card) or 0
-        selected_scheme_id = self._get_param_selected_id(tech_card, self.SCHEME_BLOCK_ID, self.SCHEME_PARAM_ID)
-        selected_scheme_reference = self._get_param_value(tech_card, self.SCHEME_BLOCK_ID, self.SCHEME_PARAM_ID)
+        selected_joint_type_id = self._get_param_selected_id(tech_card, self.OBJECT_BLOCK_ID, self.JOINT_TYPE_PARAM_ID)
+        selected_joint_type_name = self._get_param_value(tech_card, self.OBJECT_BLOCK_ID, self.JOINT_TYPE_PARAM_ID)
+        selected_scheme_id = self._get_param_selected_id(tech_card, self.SOURCE_DATA_BLOCK_ID, self.SCHEME_PARAM_ID)
+        selected_scheme_reference = self._get_param_value(tech_card, self.SOURCE_DATA_BLOCK_ID, self.SCHEME_PARAM_ID)
 
-        rebuilt_blocks = self._build_operational_card_blocks(
+        tech_card.params = self._build_operational_card_blocks_safe(
             element_id,
+            selected_joint_type_id=selected_joint_type_id,
+            selected_joint_type_name=selected_joint_type_name,
             selected_scheme_id=selected_scheme_id,
             selected_scheme_reference=selected_scheme_reference,
         )
-        self._preserve_block_values(rebuilt_blocks, tech_card, self.SIGNATURES_BLOCK_ID)
-
-        tech_card.params = rebuilt_blocks
         tech_card.type = self.TYPE_NAME
         tech_card.methodology = self.METHODOLOGY_ID
         return tech_card
 
     def get_params_for_element(self, element_id: int) -> TechCardData:
         tech_card = self._create_card()
-        tech_card.params = self._build_operational_card_blocks(element_id)
+        tech_card.params = self._build_operational_card_blocks_safe(element_id)
         return tech_card
