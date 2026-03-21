@@ -1,18 +1,12 @@
 import React, { useState } from 'react';
-import { Plus } from 'lucide-react';
 import StartScreen from './components/StartScreen';
 import TechCardForm from './components/TechCardForm';
 
 function App() {
   const [showForm, setShowForm] = useState(false);
 
-  const handleCreateNew = () => {
-    setShowForm(true);
-  };
-
-  const handleBackToStart = () => {
-    setShowForm(false);
-  };
+  const handleCreateNew = () => setShowForm(true);
+  const handleBackToStart = () => setShowForm(false);
 
   return (
     <div className="nk-app min-h-screen bg-[#0C1515] text-white">
