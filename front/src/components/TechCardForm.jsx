@@ -1660,8 +1660,10 @@ const TechCardForm = () => {
             {!isGazpromMethodology && (
               <>
                 {/* Секция 2: Выбор объекта */}
-                <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity ${hasSelectedMethodology ? 'opacity-100' : 'opacity-50'}`}>
-                  <h3 className="text-[#D97B54] font-semibold mb-4">2. Объект контроля</h3>
+                <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity
+                   ${hasSelectedMethodology ? 'opacity-100' : 'opacity-50'}`}>
+                  <h3 className="text-[#D97B54] font-semibold mb-4">
+                    2. Объект контроля</h3>
                   <ComboBoxField
                     label="Тип объекта"
                     value={selectedObject}
@@ -1676,7 +1678,9 @@ const TechCardForm = () => {
                 </div>
 
                 {/* Секция 3: Выбор элемента */}
-                <div className={`bg-[#0C1515]/50 rounded-xl p-5 transition-opacity ${hasSelectedMethodology && hasSelectedObject ? 'opacity-100' : 'opacity-50'}`}>
+                <div className={`bg-[#0C1515]/50 rounded-xl p-5
+                   transition-opacity ${hasSelectedMethodology && hasSelectedObject ?
+                    'opacity-100' : 'opacity-50'}`}>
                   <h3 className="text-[#8FB996] font-semibold mb-4">3. Элемент контроля</h3>
                   <ComboBoxField
                     label="Тип элемента"
