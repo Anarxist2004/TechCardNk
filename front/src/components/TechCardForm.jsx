@@ -762,6 +762,34 @@ const TechCardForm = () => {
     };
   };
 
+  const getParamByCompositeKey = (compositeKey) => {
+    const [blockId, ...paramParts] = String(compositeKey).split('.');
+    const paramId = paramParts.join('.');
+    const matchedBlock = blocks.find((block) => String(block.id) === blockId);
+
+    if (!matchedBlock) {
+      return null;
+    }
+
+    return matchedBlock.params.find((param) => String(param.id) === paramId) || null;
+  };
+
+  const shouldSyncParamSelection = (compositeKey, selectedOptionId) => {
+    const hasSelectedOption = selectedOptionId !== null
+      && selectedOptionId !== undefined
+      && selectedOptionId !== '';
+
+    if (!hasSelectedOption) {
+      return false;
+    }
+
+    if (selectedMethodology === GAZPROM_METHODOLOGY_ID && compositeKey === GAZPROM_SCHEME_PARAM_KEY) {
+      return true;
+    }
+
+    return Boolean(getParamByCompositeKey(compositeKey)?.syncOnSelect);
+  };
+
   const handleParamChange = async (compositeKey, value, selectedOptionId = null) => {
     const updatedValues = {
       ...paramValues,
@@ -778,15 +806,7 @@ const TechCardForm = () => {
     setParamValues(updatedValues);
     setSelectedOptionIds(updatedSelectedOptionIds);
 
-    const shouldSyncGazpromScheme = (
-      selectedMethodology === GAZPROM_METHODOLOGY_ID
-      && compositeKey === GAZPROM_SCHEME_PARAM_KEY
-      && selectedOptionId !== null
-      && selectedOptionId !== undefined
-      && selectedOptionId !== ''
-    );
-
-    if (!shouldSyncGazpromScheme) {
+    if (!shouldSyncParamSelection(compositeKey, selectedOptionId)) {
       return;
     }
 
@@ -880,7 +900,7 @@ const TechCardForm = () => {
         };
       });
 
-      if (compositeKey === GAZPROM_SCHEME_PARAM_KEY && savedId !== null && savedId !== undefined) {
+      if (shouldSyncParamSelection(compositeKey, savedId !== null && savedId !== undefined ? String(savedId) : null)) {
         await handleParamChange(compositeKey, savedName, String(savedId));
       }
 

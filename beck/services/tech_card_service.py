@@ -6,9 +6,11 @@ from interfaces.i_servise import IServise
 
 class TechCardService(IServise):
     GAZPROM_METHODOLOGY = 1
+    GAZPROM_OPERATIONAL_METHODOLOGY = 2
 
     METHODOLOGIES = {
         GAZPROM_METHODOLOGY: "Газпром",
+        GAZPROM_OPERATIONAL_METHODOLOGY: "Газпром 2",
     }
 
     def __init__(self, repos: dict[int, IRepository], piLine: PipeLine):
@@ -31,10 +33,11 @@ class TechCardService(IServise):
         return self.repos[methodology_id]
 
     def findNewParamsByTechCard(self, data: TechCardData) -> None:
+        _ = data
         return
 
     def setData(self, data: TechCardData) -> None:
-        pass
+        _ = data
 
     def getObjectControl(self, methodology=0) -> TechCardData:
         repo = self._get_repo(methodology)
@@ -47,9 +50,9 @@ class TechCardService(IServise):
     def getControlElementParam(self, id, methodology=0) -> TechCardData:
         methodology_id = self._normalise_methodology(methodology)
         repo = self._get_repo(methodology_id)
-        techCars = repo.get_params_for_type(id)
-        self.pipeLine.process(techCars, methodology_id)
-        return techCars
+        tech_card = repo.get_params_for_type(id)
+        self.pipeLine.process(tech_card, methodology_id)
+        return tech_card
 
     def getControlElementParamValue(self, idCntlEl, idParam) -> TechCardData:
         repo = self._get_repo(self.GAZPROM_METHODOLOGY)
@@ -58,9 +61,9 @@ class TechCardService(IServise):
     def geElementParamsValue(self, id, methodology=0) -> TechCardData:
         methodology_id = self._normalise_methodology(methodology)
         repo = self._get_repo(methodology_id)
-        techCars = repo.get_params_for_element(id)
-        self.pipeLine.process(techCars, methodology_id)
-        return techCars
+        tech_card = repo.get_params_for_element(id)
+        self.pipeLine.process(tech_card, methodology_id)
+        return tech_card
 
     def updateTechCard(self, techCard) -> TechCardData:
         methodology_id = self._normalise_methodology(techCard.getMethodology())
