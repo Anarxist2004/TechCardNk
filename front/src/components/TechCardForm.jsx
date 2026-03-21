@@ -19,10 +19,16 @@ import { exportTechCardToWord } from '../utils/techCardExport';
 
 const GAZPROM_METHODOLOGY_ID = '1';
 const GAZPROM_METHODOLOGY_NAME = 'Газпром';
+const GAZPROM_2_METHODOLOGY_ID = '2';
 const DISPLAY_MODE_NUMBER_ONLY = 'number_only';
 const DISPLAY_MODE_IMAGE_FULL = 'image_full';
 const GAZPROM_SCHEME_PARAM_KEY = '6.1';
 const DEFAULT_ACTIVE_TAB = 'overview';
+
+const METHODOLOGY_OPTIONS = [
+  { id: GAZPROM_METHODOLOGY_ID, label: GAZPROM_METHODOLOGY_NAME },
+  { id: GAZPROM_2_METHODOLOGY_ID, label: 'Газпром 2' },
+];
 
 const BLOCK_TAB_GROUPS = [
   {
@@ -532,6 +538,7 @@ const TableRowInput = ({
 const TechCardForm = () => {
   const [blocks, setBlocks] = useState([]);
   const [loadingBlocks, setLoadingBlocks] = useState(true);
+  const [selectedMethodology, setSelectedMethodology] = useState(GAZPROM_METHODOLOGY_ID);
   const [objectType, setObjectType] = useState(null);
   const [paramValues, setParamValues] = useState({});
   const [selectedOptionIds, setSelectedOptionIds] = useState({});
@@ -543,6 +550,8 @@ const TechCardForm = () => {
   const [standardValuesCache, setStandardValuesCache] = useState({});
   const [savingOptionKey, setSavingOptionKey] = useState(null);
   const [activeTabId, setActiveTabId] = useState(DEFAULT_ACTIVE_TAB);
+  const activeMethodology = METHODOLOGY_OPTIONS.find((option) => option.id === selectedMethodology)
+    || METHODOLOGY_OPTIONS[0];
 
   const resetLoadedTechCard = () => {
     setBlocks([]);
@@ -569,11 +578,11 @@ const TechCardForm = () => {
     setActiveTabId(nextTabs[0]?.id || DEFAULT_ACTIVE_TAB);
   };
 
-  const loadTechCard = async () => {
+  const loadTechCard = async (methodologyId = selectedMethodology) => {
     setLoadingBlocks(true);
 
     try {
-      const data = await api.getFullTechCard(GAZPROM_METHODOLOGY_ID);
+      const data = await api.getFullTechCard(methodologyId);
       applyLoadedTechCard(data);
     } catch (error) {
       console.error('Ошибка загрузки техкарты:', error);
@@ -584,8 +593,8 @@ const TechCardForm = () => {
   };
 
   useEffect(() => {
-    loadTechCard();
-  }, []);
+    loadTechCard(selectedMethodology);
+  }, [selectedMethodology]);
 
   useEffect(() => {
     const availableTabs = buildBlockTabs(blocks);
@@ -601,6 +610,15 @@ const TechCardForm = () => {
       setActiveTabId(availableTabs[0].id);
     }
   }, [blocks, activeTabId]);
+
+  const handleMethodologySelect = (methodologyId) => {
+    if (methodologyId === selectedMethodology) {
+      return;
+    }
+
+    resetLoadedTechCard();
+    setSelectedMethodology(methodologyId);
+  };
 
   const addCustomField = (blockId) => {
     setCustomFields((prev) => ({
@@ -758,7 +776,8 @@ const TechCardForm = () => {
     setSelectedOptionIds(updatedSelectedOptionIds);
 
     const shouldSyncGazpromScheme = (
-      compositeKey === GAZPROM_SCHEME_PARAM_KEY
+      selectedMethodology === GAZPROM_METHODOLOGY_ID
+      && compositeKey === GAZPROM_SCHEME_PARAM_KEY
       && selectedOptionId !== null
       && selectedOptionId !== undefined
       && selectedOptionId !== ''
@@ -771,7 +790,7 @@ const TechCardForm = () => {
     try {
       const techCardPayload = buildTechCardPayload(
         objectType,
-        GAZPROM_METHODOLOGY_ID,
+        selectedMethodology,
         blocks,
         updatedValues,
         updatedSelectedOptionIds,
@@ -799,14 +818,14 @@ const TechCardForm = () => {
     try {
       const techCardPayload = buildTechCardPayload(
         objectType,
-        GAZPROM_METHODOLOGY_ID,
+        selectedMethodology,
         blocks,
         paramValues,
         selectedOptionIds,
       );
 
       const result = await api.createParamOption({
-        methodology: Number.parseInt(GAZPROM_METHODOLOGY_ID, 10) || 0,
+        methodology: Number.parseInt(selectedMethodology, 10) || 0,
         blockId,
         paramId: param.id,
         value: currentValue,
@@ -941,7 +960,7 @@ const TechCardForm = () => {
     try {
       const techCardPayload = buildTechCardPayload(
         objectType,
-        GAZPROM_METHODOLOGY_ID,
+        selectedMethodology,
         blocks,
         paramValues,
         selectedOptionIds,
@@ -971,7 +990,7 @@ const TechCardForm = () => {
     try {
       await exportTechCardToWord({
         title: 'Технологическая карта',
-        methodologyName: GAZPROM_METHODOLOGY_NAME,
+        methodologyName: activeMethodology.label,
         objectName: '',
         elementName: '',
         blocks,
@@ -1023,14 +1042,32 @@ const TechCardForm = () => {
         <div className="bg-[#0C1515]/50 rounded-xl p-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.16em] text-[#646C89]">Методология</p>
-            <div className="mt-2 inline-flex items-center rounded-full bg-[#D97B54]/10 px-4 py-2 text-sm font-medium text-white">
-              {GAZPROM_METHODOLOGY_NAME}
+            <div className="mt-3 flex flex-wrap gap-2">
+              {METHODOLOGY_OPTIONS.map((methodology) => {
+                const isActiveMethodology = methodology.id === selectedMethodology;
+
+                return (
+                  <button
+                    key={methodology.id}
+                    type="button"
+                    onClick={() => handleMethodologySelect(methodology.id)}
+                    disabled={loadingBlocks && isActiveMethodology}
+                    className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+                      isActiveMethodology
+                        ? 'border-[#D97B54]/50 bg-[#D97B54]/15 text-white'
+                        : 'border-[#646C89]/30 bg-transparent text-[#C9CDD8] hover:border-[#D97B54]/30 hover:text-white'
+                    }`}
+                  >
+                    {methodology.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           <button
             type="button"
-            onClick={loadTechCard}
+            onClick={() => loadTechCard(selectedMethodology)}
             disabled={loadingBlocks}
             className={`
               inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium transition-colors
