@@ -9,7 +9,7 @@ function App() {
   const handleBackToStart = () => setShowForm(false);
 
   return (
-    <div className="nk-app min-h-screen bg-[#0C1515] text-white">
+    <div className="nk-app min-h-screen bg-[#0C1515] text-white flex flex-col">
       {/* Шапка */}
       <header className="bg-[#21262F] border-b border-[#646C89]/30 py-6 px-8">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
@@ -37,12 +37,14 @@ function App() {
       </header>
 
       {/* Основной контент */}
-      <main className="container mx-auto px-4 md:px-8 py-8 max-w-6xl">
-        {!showForm ? (
-          <StartScreen onCreateNew={handleCreateNew} />
-        ) : (
-          <TechCardForm />
-        )}
+      <main className="flex flex-1">
+        <div className="container mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-8 md:px-8">
+          {!showForm ? (
+            <StartScreen onCreateNew={handleCreateNew} />
+          ) : (
+            <TechCardForm />
+          )}
+        </div>
       </main>
 
       {/* Футер */}

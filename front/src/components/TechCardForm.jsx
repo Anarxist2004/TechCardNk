@@ -579,6 +579,7 @@ const TechCardForm = () => {
   };
 
   const loadTechCard = async (methodologyId = selectedMethodology) => {
+    const hadLoadedBlocks = blocks.length > 0;
     setLoadingBlocks(true);
 
     try {
@@ -586,7 +587,9 @@ const TechCardForm = () => {
       applyLoadedTechCard(data);
     } catch (error) {
       console.error('Ошибка загрузки техкарты:', error);
-      resetLoadedTechCard();
+      if (!hadLoadedBlocks) {
+        resetLoadedTechCard();
+      }
     } finally {
       setLoadingBlocks(false);
     }
@@ -612,11 +615,11 @@ const TechCardForm = () => {
   }, [blocks, activeTabId]);
 
   const handleMethodologySelect = (methodologyId) => {
-    if (methodologyId === selectedMethodology) {
+    if (methodologyId === selectedMethodology || loadingBlocks) {
       return;
     }
 
-    resetLoadedTechCard();
+    setLoadingBlocks(true);
     setSelectedMethodology(methodologyId);
   };
 
@@ -1051,7 +1054,7 @@ const TechCardForm = () => {
                     key={methodology.id}
                     type="button"
                     onClick={() => handleMethodologySelect(methodology.id)}
-                    disabled={loadingBlocks && isActiveMethodology}
+                    disabled={loadingBlocks}
                     className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
                       isActiveMethodology
                         ? 'border-[#D97B54]/50 bg-[#D97B54]/15 text-white'
@@ -1063,29 +1066,13 @@ const TechCardForm = () => {
                 );
               })}
             </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => loadTechCard(selectedMethodology)}
-            disabled={loadingBlocks}
-            className={`
-              inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium transition-colors
-              ${loadingBlocks
-                ? 'bg-[#646C89]/20 text-[#646C89] cursor-not-allowed'
-                : 'bg-[#D97B54]/10 text-white hover:bg-[#D97B54]/20'
-              }
-            `}
-          >
-            {loadingBlocks ? (
-              <>
-                <Loader2 size={16} className="animate-spin" />
-                Обновление...
-              </>
-            ) : (
-              'Перезагрузить техкарту'
+            {loadingBlocks && hasBlocks && (
+              <div className="mt-3 inline-flex items-center gap-2 text-xs text-[#646C89]">
+                <Loader2 size={14} className="animate-spin" />
+                <span>Обновление техкарты...</span>
+              </div>
             )}
-          </button>
+          </div>
         </div>
 
         {loadingBlocks && !hasBlocks && (

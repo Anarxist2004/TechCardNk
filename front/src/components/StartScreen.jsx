@@ -4,7 +4,7 @@ import { Plus, FileText } from 'lucide-react';
 // Начальный экран с кнопкой создания новой карты
 const StartScreen = ({ onCreateNew }) => {
   return (
-    <div className="min-h-[70vh] flex flex-col items-center justify-center">
+    <div className="flex flex-1 flex-col items-center justify-center">
       <div className="text-center mb-12">
         <FileText size={80} className="mx-auto mb-6 text-[#0084FF]" />
         <h2 className="text-3xl font-bold text-white mb-4">
