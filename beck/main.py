@@ -6,12 +6,13 @@ from controllers.controllerWeb import ControllerWeb
 from repositories.PostgreDbShablovGazprom import PostgreDbShablovGazprom
 from repositories.PostgreDbShablovGazpromOperational import PostgreDbShablovGazpromOperational
 from services.Changers.Gazprom.ch_ExpandJsonPayloads import ExpandJsonPayloads
+from services.Changers.Gazprom.ch_SetReadOnlyTrueSourceData import SetReadOnlyTrueSourceData
 from services.PipeLine import PipeLine
 from services.tech_card_service import TechCardService
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
-DB_DSN = "host=localhost port=5432 dbname=welding_control_db user=postgres password=admin"
+DB_DSN = "host=localhost port=5435 dbname=welding_control_db user=postgres password=1"
 
 
 def fill_gazprom_pipeline(pipe_line: PipeLine) -> None:
@@ -22,7 +23,7 @@ def fill_gazprom_pipeline(pipe_line: PipeLine) -> None:
 def fill_gazprom_operational_pipeline(pipe_line: PipeLine) -> None:
     methodology_id = TechCardService.GAZPROM_OPERATIONAL_METHODOLOGY
     pipe_line.addChanger(ExpandJsonPayloads(), methodology_id)
-
+    pipe_line.addChanger(SetReadOnlyTrueSourceData(), methodology_id)
 
 def create_pipeline() -> PipeLine:
     pipe_line = PipeLine()
