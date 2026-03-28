@@ -2,7 +2,7 @@ import traceback
 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
-from interfaces.i_controllers import IControllers
+from controllers.Interfaces.i_controllers import IControllers
 import uvicorn
 from fastapi import Body
 from fastapi.middleware.cors import CORSMiddleware

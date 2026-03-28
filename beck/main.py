@@ -3,8 +3,6 @@ import sys
 
 from controllers.adapterWeb import create_adapter
 from controllers.controllerWeb import ControllerWeb
-from repositories.PostgreDbShablovGazprom import PostgreDbShablovGazprom
-from repositories.PostgreDbShablovGazpromOperational import PostgreDbShablovGazpromOperational
 from services.Changers.Gazprom.ch_ExpandJsonPayloads import ExpandJsonPayloads
 from services.Changers.Gazprom.ch_SetReadOnlyTrueSourceData import SetReadOnlyTrueSourceData
 from services.PipeLine import PipeLine
@@ -34,12 +32,12 @@ def create_pipeline() -> PipeLine:
 
 def main():
     repos = {
-        TechCardService.GAZPROM_METHODOLOGY: PostgreDbShablovGazprom(
-            DB_DSN
-        ),
-        TechCardService.GAZPROM_OPERATIONAL_METHODOLOGY: PostgreDbShablovGazpromOperational(
-            DB_DSN
-        ),
+        # TechCardService.GAZPROM_METHODOLOGY: PostgreDbShablovGazprom(
+        #     DB_DSN
+        # ),
+        # TechCardService.GAZPROM_OPERATIONAL_METHODOLOGY: PostgreDbShablovGazpromOperational(
+        #     DB_DSN
+        # ),
     }
     controller = ControllerWeb()
     service = TechCardService(repos, create_pipeline())

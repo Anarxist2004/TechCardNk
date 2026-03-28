@@ -1,7 +1,7 @@
 from services.tech_card import TechCardData
 from services.PipeLine import PipeLine
-from interfaces.i_repository import IRepository
-from interfaces.i_servise import IServise
+from repositories.Interfaces.i_repository import IRepository
+from services.Interfaces.i_servise import IServise
 
 
 class TechCardService(IServise):

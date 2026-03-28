@@ -1,6 +1,6 @@
-from interfaces.i_controllers import IControllers
+from controllers.Interfaces.i_controllers import IControllers
 from services.tech_card import TechCardData
-from interfaces.i_servise import IServise
+from services.Interfaces.i_servise import IServise
 
 class ControllerWeb(IControllers[TechCardData]):
     def __init__(self):

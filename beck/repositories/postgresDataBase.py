@@ -1,4 +1,4 @@
-from interfaces.i_repository import IRepository
+from repositories.Interfaces.i_repository import IRepository
 from services.tech_card import TechCardData
 from services.tech_card import TypeObjectControl
 from typing import List, Optional

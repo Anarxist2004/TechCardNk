@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar, List
-from interfaces.i_servise import IServise
+from services.Interfaces.i_servise import IServise
 T = TypeVar('T')
 
 class IControllers(ABC, Generic[T]):

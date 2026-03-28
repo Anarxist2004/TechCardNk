@@ -1,6 +1,6 @@
 
 
-from services.i_dataChanger import IDataChanger
+from services.Interfaces.i_dataChanger import IDataChanger
 from services.tech_card import TechCardData
 
 class TypeWeldedJoint(IDataChanger):
