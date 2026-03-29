@@ -400,7 +400,8 @@ const buildOfficialBlock1Html = (block, paramValues, imageSrcMap, paramValues2 =
  * Блок «Объект контроля» с subtitle:
  * — слева «N. ОБЪЕКТ КОНТРОЛЯ» только на строках с subtitle «ОБЪЕКТ КОНТРОЛЯ» / general;
  * — подряд секции «Параметры сварного соединения» и «Требования к проведению контроля»;
- * — одна колонка с рисунком справа на всю их суммарную высоту.
+ * — справа одна ячейка с рисунком на всю высоту обеих секций (всего 3 колонки: имя | значение | схема);
+ * — если нет строки section_header, перед параметрами группы выводится строка с текстом subtitle.
  */
 const buildOfficialBlock2GroupedHtml = (
   block,
@@ -497,7 +498,7 @@ const buildOfficialBlock2GroupedHtml = (
         <tr>
           ${sideCell}
           <td class="off-b2-name">${escapeHtml(p.name || '')}</td>
-          <td class="off-b2-val" align="center" colspan="2">${escapeHtml(val || '')}</td>
+          <td class="off-b2-val" align="center">${escapeHtml(val || '')}</td>
         </tr>`);
         }
       }
@@ -514,7 +515,28 @@ const buildOfficialBlock2GroupedHtml = (
         end += 1;
       }
       const zoneGroups = groups.slice(groupIndex, end);
-      const zoneRowCount = zoneGroups.reduce((acc, zg) => acc + countRowsInGroup(zg), 0);
+
+      const getDiagramZoneDisplayRows = (zg) => {
+        const rows = zg.rows;
+        if (rows.length === 0) {
+          return rows;
+        }
+        if (rows[0].kind === 'section') {
+          return rows;
+        }
+        if (zg.subtitle === '__default__') {
+          return rows;
+        }
+        return [
+          { kind: 'section', title: zg.subtitle, synthetic: true },
+          ...rows,
+        ];
+      };
+
+      const zoneRowCount = zoneGroups.reduce(
+        (acc, zg) => acc + getDiagramZoneDisplayRows(zg).length,
+        0,
+      );
 
       const diagramTd = diagramSrc
         ? `<td class="off-b2-diagram" rowspan="${zoneRowCount}" align="center" valign="top">
@@ -524,16 +546,12 @@ const buildOfficialBlock2GroupedHtml = (
 
       let firstPhysical = true;
       for (const zg of zoneGroups) {
-        for (const row of zg.rows) {
-          const gapCell = firstPhysical
-            ? `<td class="off-b2-gap" rowspan="${zoneRowCount}">&#160;</td>`
-            : '';
-
+        const displayRows = getDiagramZoneDisplayRows(zg);
+        for (const row of displayRows) {
           if (diagramSrc) {
             if (row.kind === 'section') {
               trs.push(`
         <tr>
-          ${gapCell}
           <td class="off-b2-section" colspan="2">${escapeHtml(row.title)}</td>
           ${firstPhysical ? diagramTd : ''}
         </tr>`);
@@ -543,7 +561,6 @@ const buildOfficialBlock2GroupedHtml = (
               const val = getParamExportCellText(p, key, paramValues, paramValues2);
               trs.push(`
         <tr>
-          ${gapCell}
           <td class="off-b2-name">${escapeHtml(p.name || '')}</td>
           <td class="off-b2-val" align="center">${escapeHtml(val || '')}</td>
           ${firstPhysical ? diagramTd : ''}
@@ -552,8 +569,7 @@ const buildOfficialBlock2GroupedHtml = (
           } else if (row.kind === 'section') {
             trs.push(`
         <tr>
-          ${gapCell}
-          <td class="off-b2-section" colspan="2">${escapeHtml(row.title)}</td>
+          <td class="off-b2-section" colspan="3">${escapeHtml(row.title)}</td>
         </tr>`);
           } else {
             const p = row.param;
@@ -561,7 +577,6 @@ const buildOfficialBlock2GroupedHtml = (
             const val = getParamExportCellText(p, key, paramValues, paramValues2);
             trs.push(`
         <tr>
-          ${gapCell}
           <td class="off-b2-name">${escapeHtml(p.name || '')}</td>
           <td class="off-b2-val" align="center" colspan="2">${escapeHtml(val || '')}</td>
         </tr>`);
@@ -573,18 +588,11 @@ const buildOfficialBlock2GroupedHtml = (
       continue;
     }
 
-    const n = countRowsInGroup(g);
-    let first = true;
     for (const row of g.rows) {
-      const gapCell = first
-        ? `<td class="off-b2-gap" rowspan="${n}">&#160;</td>`
-        : '';
-      first = false;
       if (row.kind === 'section') {
         trs.push(`
         <tr>
-          ${gapCell}
-          <td class="off-b2-section" colspan="2">${escapeHtml(row.title)}</td>
+          <td class="off-b2-section" colspan="3">${escapeHtml(row.title)}</td>
         </tr>`);
       } else {
         const p = row.param;
@@ -592,7 +600,6 @@ const buildOfficialBlock2GroupedHtml = (
         const val = getParamExportCellText(p, key, paramValues, paramValues2);
         trs.push(`
         <tr>
-          ${gapCell}
           <td class="off-b2-name">${escapeHtml(p.name || '')}</td>
           <td class="off-b2-val" align="center" colspan="2">${escapeHtml(val || '')}</td>
         </tr>`);
@@ -1249,10 +1256,6 @@ const buildWordHtml = ({
           width: 12%;
           font-size: 9pt;
           line-height: 1.15;
-        }
-        .off-b2-gap {
-          width: 12%;
-          vertical-align: top;
         }
         .off-b2-name { width: 44%; vertical-align: top; }
         .off-b2-val { width: 18%; vertical-align: top; }
