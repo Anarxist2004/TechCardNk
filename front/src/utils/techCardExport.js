@@ -3,6 +3,70 @@ const DISPLAY_MODE_IMAGE_FULL = 'image_full';
 const DISPLAY_MODE_SECTION_HEADER = 'section_header';
 const DISPLAY_MODE_OPERATIONS_ROW = 'operations_row';
 
+/**
+ * Подгруппы блока «Объект контроля» (блок 2): в API допустимы и короткие ключи, и русские подписи
+ * (например «ОБЪЕКТ КОНТРОЛЯ», «Параметры сварного соединения») — группировка по точному значению subtitle.
+ */
+export const PARAM_SUBTITLE_BLOCK2 = {
+  GENERAL: 'general',
+  WELD_PARAMETERS: 'weld_parameters',
+  REQUIREMENTS: 'requirements',
+};
+
+const trimBlock2Subtitle = (s) => (s == null ? '' : String(s).trim());
+
+/** Строки с подписью «N. ОБЪЕКТ КОНТРОЛЯ» слева (только эта группа subtitle). */
+const isBlock2ObjectControlSubtitle = (subtitle) => {
+  const t = trimBlock2Subtitle(subtitle).toLowerCase();
+  if (!t) {
+    return false;
+  }
+  if (t === String(PARAM_SUBTITLE_BLOCK2.GENERAL).toLowerCase()) {
+    return true;
+  }
+  return t.includes('объект') && t.includes('контрол');
+};
+
+/** Секция «Параметры сварного соединения». */
+const isBlock2WeldDiagramSubtitle = (subtitle) => {
+  const t = trimBlock2Subtitle(subtitle).toLowerCase();
+  if (!t) {
+    return false;
+  }
+  if (t === String(PARAM_SUBTITLE_BLOCK2.WELD_PARAMETERS).toLowerCase()) {
+    return true;
+  }
+  if (t.includes('параметр') && t.includes('сварн')) {
+    return true;
+  }
+  return false;
+};
+
+/** Секция «Требования к проведению контроля» — одна колонка с рисунком с секцией параметров сварки. */
+const isBlock2RequirementsSubtitle = (subtitle) => {
+  const t = trimBlock2Subtitle(subtitle).toLowerCase();
+  if (!t) {
+    return false;
+  }
+  if (t === String(PARAM_SUBTITLE_BLOCK2.REQUIREMENTS).toLowerCase()) {
+    return true;
+  }
+  return t.includes('требован') && (t.includes('проведен') || t.includes('контрол'));
+};
+
+const isBlock2DiagramZoneSubtitle = (subtitle) => isBlock2WeldDiagramSubtitle(subtitle)
+  || isBlock2RequirementsSubtitle(subtitle);
+
+const block2SubtitleModeEnabled = (params) => params.some(
+  (p) => trimBlock2Subtitle(p?.subtitle) !== '',
+);
+
+/** Пустой subtitle в одном блоке с другими подзаголовками — отдельная группа «по умолчанию». */
+const effectiveBlock2Subtitle = (param) => {
+  const t = trimBlock2Subtitle(param?.subtitle);
+  return t || '__default__';
+};
+
 const escapeHtml = (value = '') => String(value)
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -333,8 +397,219 @@ const buildOfficialBlock1Html = (block, paramValues, imageSrcMap, paramValues2 =
 };
 
 /**
+ * Блок «Объект контроля» с subtitle:
+ * — слева «N. ОБЪЕКТ КОНТРОЛЯ» только на строках с subtitle «ОБЪЕКТ КОНТРОЛЯ» / general;
+ * — подряд секции «Параметры сварного соединения» и «Требования к проведению контроля»;
+ * — одна колонка с рисунком справа на всю их суммарную высоту.
+ */
+const buildOfficialBlock2GroupedHtml = (
+  block,
+  paramValues,
+  imageSrcMap,
+  paramValues2,
+  params,
+  imageParams,
+) => {
+  const blockId = block.id;
+  const leftRows = [];
+  for (const p of params) {
+    if (paramHasImage(p, `${blockId}.${p.id}`, imageSrcMap)) {
+      continue;
+    }
+    const subtitle = effectiveBlock2Subtitle(p);
+    if (isSectionHeaderParam(p)) {
+      leftRows.push({ kind: 'section', title: p.name || '', subtitle });
+    } else {
+      leftRows.push({ kind: 'kv', param: p, subtitle });
+    }
+  }
+
+  const groups = [];
+  for (const row of leftRows) {
+    const last = groups[groups.length - 1];
+    if (!last || last.subtitle !== row.subtitle) {
+      groups.push({ subtitle: row.subtitle, rows: [row] });
+    } else {
+      last.rows.push(row);
+    }
+  }
+
+  const diagramImageParam = imageParams.find(
+    (p) => isBlock2DiagramZoneSubtitle(p.subtitle),
+  ) || imageParams[0];
+  const diagramSrc = diagramImageParam
+    ? (imageSrcMap[`${blockId}.${diagramImageParam.id}`] || '')
+    : '';
+
+  const countRowsInGroup = (g) => g.rows.length;
+
+  const totalRows = groups.reduce((acc, g) => acc + countRowsInGroup(g), 0);
+
+  const sideLabel = `${escapeHtml(String(block.id))}. ${escapeHtml((block.name || 'ОБЪЕКТ КОНТРОЛЯ').toUpperCase())}`;
+
+  if (totalRows === 0 && !diagramSrc) {
+    return `
+      <table class="official-table" width="100%" border="1">
+        <tr><td class="off-empty">Нет данных для экспорта в этом разделе.</td></tr>
+      </table>`;
+  }
+
+  if (totalRows === 0 && diagramSrc) {
+    return `
+      <table class="official-table official-b2" width="100%" border="1">
+        <tr>
+          <td class="off-b2-side">${sideLabel}</td>
+          <td class="off-b2-diagram" colspan="2" align="center">
+            <div class="off-diagram-wrap"><img src="${diagramSrc}" alt="" /></div>
+          </td>
+        </tr>
+      </table>`;
+  }
+
+  const trs = [];
+
+  let groupIndex = 0;
+  while (groupIndex < groups.length) {
+    const g = groups[groupIndex];
+
+    if (isBlock2ObjectControlSubtitle(g.subtitle)) {
+      const n = countRowsInGroup(g);
+      const ocSide = `<td class="off-b2-side" rowspan="${n}">${sideLabel}</td>`;
+      let first = true;
+      for (const row of g.rows) {
+        const sideCell = first ? ocSide : '';
+        first = false;
+        if (row.kind === 'section') {
+          trs.push(`
+        <tr>
+          ${sideCell}
+          <td class="off-b2-section" colspan="2">${escapeHtml(row.title)}</td>
+        </tr>`);
+        } else {
+          const p = row.param;
+          const val = getParamExportCellText(
+            p,
+            `${blockId}.${p.id}`,
+            paramValues,
+            paramValues2,
+          );
+          trs.push(`
+        <tr>
+          ${sideCell}
+          <td class="off-b2-name">${escapeHtml(p.name || '')}</td>
+          <td class="off-b2-val" align="center" colspan="2">${escapeHtml(val || '')}</td>
+        </tr>`);
+        }
+      }
+      groupIndex += 1;
+      continue;
+    }
+
+    if (isBlock2DiagramZoneSubtitle(g.subtitle)) {
+      let end = groupIndex;
+      while (
+        end < groups.length
+        && isBlock2DiagramZoneSubtitle(groups[end].subtitle)
+      ) {
+        end += 1;
+      }
+      const zoneGroups = groups.slice(groupIndex, end);
+      const zoneRowCount = zoneGroups.reduce((acc, zg) => acc + countRowsInGroup(zg), 0);
+
+      const diagramTd = diagramSrc
+        ? `<td class="off-b2-diagram" rowspan="${zoneRowCount}" align="center" valign="top">
+        <div class="off-diagram-wrap"><img src="${diagramSrc}" alt="" /></div>
+      </td>`
+        : '';
+
+      let firstPhysical = true;
+      for (const zg of zoneGroups) {
+        for (const row of zg.rows) {
+          const gapCell = firstPhysical
+            ? `<td class="off-b2-gap" rowspan="${zoneRowCount}">&#160;</td>`
+            : '';
+
+          if (diagramSrc) {
+            if (row.kind === 'section') {
+              trs.push(`
+        <tr>
+          ${gapCell}
+          <td class="off-b2-section" colspan="2">${escapeHtml(row.title)}</td>
+          ${firstPhysical ? diagramTd : ''}
+        </tr>`);
+            } else {
+              const p = row.param;
+              const key = `${blockId}.${p.id}`;
+              const val = getParamExportCellText(p, key, paramValues, paramValues2);
+              trs.push(`
+        <tr>
+          ${gapCell}
+          <td class="off-b2-name">${escapeHtml(p.name || '')}</td>
+          <td class="off-b2-val" align="center">${escapeHtml(val || '')}</td>
+          ${firstPhysical ? diagramTd : ''}
+        </tr>`);
+            }
+          } else if (row.kind === 'section') {
+            trs.push(`
+        <tr>
+          ${gapCell}
+          <td class="off-b2-section" colspan="2">${escapeHtml(row.title)}</td>
+        </tr>`);
+          } else {
+            const p = row.param;
+            const key = `${blockId}.${p.id}`;
+            const val = getParamExportCellText(p, key, paramValues, paramValues2);
+            trs.push(`
+        <tr>
+          ${gapCell}
+          <td class="off-b2-name">${escapeHtml(p.name || '')}</td>
+          <td class="off-b2-val" align="center" colspan="2">${escapeHtml(val || '')}</td>
+        </tr>`);
+          }
+          firstPhysical = false;
+        }
+      }
+      groupIndex = end;
+      continue;
+    }
+
+    const n = countRowsInGroup(g);
+    let first = true;
+    for (const row of g.rows) {
+      const gapCell = first
+        ? `<td class="off-b2-gap" rowspan="${n}">&#160;</td>`
+        : '';
+      first = false;
+      if (row.kind === 'section') {
+        trs.push(`
+        <tr>
+          ${gapCell}
+          <td class="off-b2-section" colspan="2">${escapeHtml(row.title)}</td>
+        </tr>`);
+      } else {
+        const p = row.param;
+        const key = `${blockId}.${p.id}`;
+        const val = getParamExportCellText(p, key, paramValues, paramValues2);
+        trs.push(`
+        <tr>
+          ${gapCell}
+          <td class="off-b2-name">${escapeHtml(p.name || '')}</td>
+          <td class="off-b2-val" align="center" colspan="2">${escapeHtml(val || '')}</td>
+        </tr>`);
+      }
+    }
+    groupIndex += 1;
+  }
+
+  return `
+    <table class="official-table official-b2 official-b2-grouped" width="100%" border="1">
+      ${trs.join('')}
+    </table>`;
+};
+
+/**
  * Блок «Объект контроля»: слева подпись с rowspan, строки параметров, опционально вложенные подзаголовки;
- * справа объединённая ячейка со схемой шва.
+ * справа объединённая ячейка со схемой шва (без subtitle — на всю высоту текстовой части).
  */
 const buildOfficialBlock2Html = (block, paramValues, imageSrcMap, paramValues2 = {}) => {
   const params = (block.params || []).filter((p) => !isOperationsRowParam(p));
@@ -342,6 +617,17 @@ const buildOfficialBlock2Html = (block, paramValues, imageSrcMap, paramValues2 =
   const diagramSrc = imageParams.length > 0
     ? (imageSrcMap[`${block.id}.${imageParams[0].id}`] || '')
     : '';
+
+  if (block2SubtitleModeEnabled(params)) {
+    return buildOfficialBlock2GroupedHtml(
+      block,
+      paramValues,
+      imageSrcMap,
+      paramValues2,
+      params,
+      imageParams,
+    );
+  }
 
   const leftRows = [];
   for (const p of params) {
@@ -963,6 +1249,10 @@ const buildWordHtml = ({
           width: 12%;
           font-size: 9pt;
           line-height: 1.15;
+        }
+        .off-b2-gap {
+          width: 12%;
+          vertical-align: top;
         }
         .off-b2-name { width: 44%; vertical-align: top; }
         .off-b2-val { width: 18%; vertical-align: top; }

@@ -9,5 +9,5 @@ class IParamsByTypeWeldingJointDB(ABC):
     def get_params_by_welded_joint_type(
         self, joint_name_or_id: Union[str, int]
     ) -> List[Dict[str, Any]]:
-        """Список записей с полями id, name для выбранного типа соединения, порядок по id."""
+        """Список записей: id, name, subtitle для выбранного типа соединения, порядок по id."""
         pass

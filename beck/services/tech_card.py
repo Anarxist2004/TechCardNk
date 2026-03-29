@@ -201,6 +201,20 @@ class TechCardData:
             return False
         return False
 
+    def update_param(
+        self, block_name: str, param_name: str, fields: Dict[str, Any]
+    ) -> bool:
+        for block in self.params.values():
+            if block.get("name") != block_name:
+                continue
+            params = block.get("params", {})
+            for param in params.values():
+                if param.get("name") == param_name:
+                    param.update(fields)
+                    return True
+            return False
+        return False
+
     def _parse_id(self, key) -> list[int]:
         if isinstance(key, int):
             return [key]

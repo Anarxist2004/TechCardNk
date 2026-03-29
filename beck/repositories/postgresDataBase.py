@@ -214,7 +214,7 @@ class PostgresDataBase(
                     cond = "lower(btrim(twj.name::text)) = lower(btrim(%s::text))"
                     param = (key,)
             self.cursor.execute(
-                "SELECT p.id, p.name FROM public.params_by_type_welding_joint p "
+                "SELECT p.id, p.name, p.subtitle FROM public.params_by_type_welding_joint p "
                 "INNER JOIN public.type_of_welded_joint twj ON twj.id = p.type_of_welded_joint_id "
                 f"WHERE {cond} ORDER BY p.id",
                 param,

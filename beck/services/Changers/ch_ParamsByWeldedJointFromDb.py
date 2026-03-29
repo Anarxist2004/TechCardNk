@@ -6,10 +6,20 @@ from services.tech_card import TechCardData
 from services.Changers.param_choice import is_scalar_choice
 
 
+def _subtitle_value(row: dict):
+    raw = row.get("subtitle")
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        s = raw.strip()
+        return s if s else None
+    return str(raw)
+
+
 class ParamsByWeldedJointFromDb(IDataChanger[TechCardData]):
     """
     Блок «Объект контроля»: для одиночного выбора «Тип сварного соединения»
-    добавляет параметры из params_by_type_welding_joint (по одному полю name на строку БД).
+    добавляет параметры из params_by_type_welding_joint: поля name, subtitle (рядом с name), val.
     Уже существующие в блоке параметры с тем же именем не дублируются.
     """
 
@@ -40,8 +50,10 @@ class ParamsByWeldedJointFromDb(IDataChanger[TechCardData]):
             pname = str(pname).strip()
             if data.has_block_and_param(self.BLOCK_OBJECT, pname):
                 continue
-            data.add_param_to_block(
-                self.BLOCK_OBJECT,
-                {"name": pname, "val": None},
-            )
+            param = {
+                "name": pname,
+                "subtitle": _subtitle_value(row),
+                "val": None,
+            }
+            data.add_param_to_block(self.BLOCK_OBJECT, param)
         return data

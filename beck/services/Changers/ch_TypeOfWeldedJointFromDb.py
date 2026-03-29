@@ -16,7 +16,7 @@ def _is_empty_val(val) -> bool:
 
 class TypeOfWeldedJointFromDb(IDataChanger[TechCardData]):
     """
-    Блок «Объект контроля»: «Тип сварного соединения».
+    Блок «Объект контроля»: «Тип сварного соединения» (subtitle: ОБЪЕКТ КОНТРОЛЯ).
     Подставляет данные только если «НОРМАТИВНЫЕ ДОКУМЕНТЫ» — одиночный выбор (str/int),
     не пустое и не массив.
     """
@@ -28,6 +28,7 @@ class TypeOfWeldedJointFromDb(IDataChanger[TechCardData]):
     BLOCK_OBJECT = "Объект контроля"
     PARAM_REGULATORY = "НОРМАТИВНЫЕ ДОКУМЕНТЫ"
     PARAM_JOINT = "Тип сварного соединения"
+    SUBTITLE_JOINT = "ОБЪЕКТ КОНТРОЛЯ"
 
     def __init__(self, db: ITypeOfWeldedJointDB):
         self._db = db
@@ -71,8 +72,18 @@ class TypeOfWeldedJointFromDb(IDataChanger[TechCardData]):
 
         if data.has_block_and_param(self.BLOCK_OBJECT, self.PARAM_JOINT):
             data.set_param_value(self.BLOCK_OBJECT, self.PARAM_JOINT, names)
+            data.update_param(
+                self.BLOCK_OBJECT,
+                self.PARAM_JOINT,
+                {"subtitle": self.SUBTITLE_JOINT},
+            )
         else:
             data.add_param_to_block(
-                self.BLOCK_OBJECT, {"name": self.PARAM_JOINT, "val": names}
+                self.BLOCK_OBJECT,
+                {
+                    "name": self.PARAM_JOINT,
+                    "val": names,
+                    "subtitle": self.SUBTITLE_JOINT,
+                },
             )
         return data

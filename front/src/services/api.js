@@ -73,6 +73,7 @@ function transformBlocksResponse(data) {
 
         const hasVal2 = Object.prototype.hasOwnProperty.call(param, 'val2');
 
+        const rawSubtitle = param.subtitle;
         const paramData = {
           id: paramId,
           name: param.name || `Параметр ${paramId}`,
@@ -86,6 +87,9 @@ function transformBlocksResponse(data) {
           syncOnSelect: Boolean(param.syncOnSelect),
           readOnly: Boolean(param.readOnly),
           image: param.image || null,
+          ...(rawSubtitle !== undefined && rawSubtitle !== null && String(rawSubtitle).trim() !== ''
+            ? { subtitle: String(rawSubtitle).trim() }
+            : {}),
           blockId,
           blockName: block.name,
         };
