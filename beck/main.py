@@ -10,6 +10,7 @@ from services.Changers.ch_RegulatoryDocumentsFromDb import RegulatoryDocumentsFr
 from services.Changers.ch_TypeOfWeldedJointFromDb import TypeOfWeldedJointFromDb
 from services.Changers.ch_WeldedJointDiagramFromDb import WeldedJointDiagramFromDb
 from services.Changers.ch_ParamsByWeldedJointFromDb import ParamsByWeldedJointFromDb
+from services.Changers.ch_ControlSchemesFromDb import ControlSchemesFromJointTypeDb
 from services.Changers.ch_ControlledZoneWidthStub import ControlledZoneWidthStub
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
@@ -23,6 +24,7 @@ def create_pipeline(repos: PostgresDataBase) -> PipeLine:
     pipe_line.addChanger(RegulatoryDocumentsFromDb(repos), 0)
     pipe_line.addChanger(TypeOfWeldedJointFromDb(repos), 0)
     pipe_line.addChanger(WeldedJointDiagramFromDb(repos), 0)
+    pipe_line.addChanger(ControlSchemesFromJointTypeDb(repos), 0)
     pipe_line.addChanger(ParamsByWeldedJointFromDb(repos), 0)
     pipe_line.addChanger(ControlledZoneWidthStub(), 0)
     return pipe_line

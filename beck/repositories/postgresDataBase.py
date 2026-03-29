@@ -5,6 +5,7 @@ from repositories.Interfaces.i_type_of_welded_joint_db import ITypeOfWeldedJoint
 from repositories.Interfaces.i_params_by_type_welding_joint_db import (
     IParamsByTypeWeldingJointDB,
 )
+from repositories.Interfaces.i_cheme_control_db import IChemeControlDB
 from services.tech_card import TechCardData
 from typing import Any, Dict, List, Optional, Union
 import psycopg2
@@ -17,6 +18,7 @@ class PostgresDataBase(
     IRegulatoryDocumentsDB,
     ITypeOfWeldedJointDB,
     IParamsByTypeWeldingJointDB,
+    IChemeControlDB,
 ):
 
     def __init__(self, dsn: str):
@@ -223,4 +225,37 @@ class PostgresDataBase(
             return [dict(r) for r in rows]
         except psycopg2.Error as e:
             print("get_params_by_welded_joint_type:", e)
+            return []
+
+    def get_control_schemes_for_welded_joint(
+        self, joint_name_or_id: Union[str, int]
+    ) -> List[Dict[str, Any]]:
+        if not self.cursor:
+            return []
+        try:
+            if isinstance(joint_name_or_id, int):
+                cond = "twj.id = %s"
+                param = (joint_name_or_id,)
+            else:
+                key = str(joint_name_or_id).strip()
+                if not key:
+                    return []
+                if key.isdigit():
+                    cond = "twj.id = %s"
+                    param = (int(key),)
+                else:
+                    cond = "lower(btrim(twj.name::text)) = lower(btrim(%s::text))"
+                    param = (key,)
+            self.cursor.execute(
+                "SELECT cc.id, cc.name, cc.image_ref "
+                "FROM public.cheme_control cc "
+                "INNER JOIN public.weld_type_to_scheme wts ON wts.cheme_control_id = cc.id "
+                "INNER JOIN public.type_of_welded_joint twj ON twj.id = wts.type_of_welded_joint_id "
+                f"WHERE {cond} ORDER BY cc.id",
+                param,
+            )
+            rows = self.cursor.fetchall()
+            return [dict(r) for r in rows]
+        except psycopg2.Error as e:
+            print("get_control_schemes_for_welded_joint:", e)
             return []

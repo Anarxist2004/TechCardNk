@@ -252,7 +252,8 @@ const isOperationsRowParam = (param) => param?.displayMode === DISPLAY_MODE_OPER
 
 const isReadOnlyParam = (param) => Boolean(param?.readOnly) || isSectionHeaderParam(param) || isOperationsRowParam(param);
 
-const isEditableParam = (param) => !isReadOnlyParam(param) && !isImageParam(param);
+/** Параметры с картинкой (схема) тоже могут иметь поле значения — исключение только readOnly / заголовки / операции. */
+const isEditableParam = (param) => !isReadOnlyParam(param);
 
 const normalizeStaticValue = (value) => {
   if (value === null || value === undefined) {
@@ -1627,8 +1628,8 @@ const TechCardForm = () => {
                                     imageSrc = `data:image/png;base64,${imageSrc}`;
                                   }
 
-                                  return (
-                                    <tr key={compositeKey} className="border-b border-[#646C89]/20">
+                                  const imageRow = (
+                                    <tr key={`${compositeKey}-img`} className="border-b border-[#646C89]/20">
                                       <td colSpan={2} className="py-4 px-2">
                                         {!isFullImageMode && (
                                           <div className="text-white text-sm mb-2">
@@ -1647,6 +1648,33 @@ const TechCardForm = () => {
                                         </div>
                                       </td>
                                     </tr>
+                                  );
+
+                                  if (isReadOnlyParam(param)) {
+                                    return imageRow;
+                                  }
+
+                                  return (
+                                    <React.Fragment key={compositeKey}>
+                                      {imageRow}
+                                      <TableRowInput
+                                        paramKey={compositeKey}
+                                        paramName={param.name}
+                                        value={paramValues[compositeKey] || ''}
+                                        value2={param.hasVal2 ? (paramValues2[compositeKey] ?? '') : ''}
+                                        hasVal2={Boolean(param.hasVal2)}
+                                        onChange={(nextValue, selectedId) => handleParamChange(compositeKey, nextValue, selectedId)}
+                                        onChange2={param.hasVal2
+                                          ? (next) => handleParamValue2Change(compositeKey, next)
+                                          : undefined}
+                                        onCreateOption={() => handleCreateParamOption(block.id, param)}
+                                        standardValues={getStandardValuesForParam(param, block.id)}
+                                        typeData={getParamTypeData(param)}
+                                        displayMode={param.displayMode}
+                                        canCreateOption={param.canCreateOption}
+                                        isCreatingOption={savingOptionKey === compositeKey}
+                                      />
+                                    </React.Fragment>
                                   );
                                 }
 
