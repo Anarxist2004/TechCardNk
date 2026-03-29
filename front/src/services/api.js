@@ -72,8 +72,8 @@ function transformBlocksResponse(data) {
         }
 
         const hasVal2 = Object.prototype.hasOwnProperty.call(param, 'val2');
-
         const rawSubtitle = param.subtitle;
+
         const paramData = {
           id: paramId,
           name: param.name || `Параметр ${paramId}`,

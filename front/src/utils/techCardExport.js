@@ -3,68 +3,11 @@ const DISPLAY_MODE_IMAGE_FULL = 'image_full';
 const DISPLAY_MODE_SECTION_HEADER = 'section_header';
 const DISPLAY_MODE_OPERATIONS_ROW = 'operations_row';
 
-/**
- * Подгруппы блока «Объект контроля» (блок 2): в API допустимы и короткие ключи, и русские подписи
- * (например «ОБЪЕКТ КОНТРОЛЯ», «Параметры сварного соединения») — группировка по точному значению subtitle.
- */
+/** Значения поля subtitle для блока 2 (API / шаблон). */
 export const PARAM_SUBTITLE_BLOCK2 = {
   GENERAL: 'general',
   WELD_PARAMETERS: 'weld_parameters',
   REQUIREMENTS: 'requirements',
-};
-
-const trimBlock2Subtitle = (s) => (s == null ? '' : String(s).trim());
-
-/** Строки с подписью «N. ОБЪЕКТ КОНТРОЛЯ» слева (только эта группа subtitle). */
-const isBlock2ObjectControlSubtitle = (subtitle) => {
-  const t = trimBlock2Subtitle(subtitle).toLowerCase();
-  if (!t) {
-    return false;
-  }
-  if (t === String(PARAM_SUBTITLE_BLOCK2.GENERAL).toLowerCase()) {
-    return true;
-  }
-  return t.includes('объект') && t.includes('контрол');
-};
-
-/** Секция «Параметры сварного соединения». */
-const isBlock2WeldDiagramSubtitle = (subtitle) => {
-  const t = trimBlock2Subtitle(subtitle).toLowerCase();
-  if (!t) {
-    return false;
-  }
-  if (t === String(PARAM_SUBTITLE_BLOCK2.WELD_PARAMETERS).toLowerCase()) {
-    return true;
-  }
-  if (t.includes('параметр') && t.includes('сварн')) {
-    return true;
-  }
-  return false;
-};
-
-/** Секция «Требования к проведению контроля» — одна колонка с рисунком с секцией параметров сварки. */
-const isBlock2RequirementsSubtitle = (subtitle) => {
-  const t = trimBlock2Subtitle(subtitle).toLowerCase();
-  if (!t) {
-    return false;
-  }
-  if (t === String(PARAM_SUBTITLE_BLOCK2.REQUIREMENTS).toLowerCase()) {
-    return true;
-  }
-  return t.includes('требован') && (t.includes('проведен') || t.includes('контрол'));
-};
-
-const isBlock2DiagramZoneSubtitle = (subtitle) => isBlock2WeldDiagramSubtitle(subtitle)
-  || isBlock2RequirementsSubtitle(subtitle);
-
-const block2SubtitleModeEnabled = (params) => params.some(
-  (p) => trimBlock2Subtitle(p?.subtitle) !== '',
-);
-
-/** Пустой subtitle в одном блоке с другими подзаголовками — отдельная группа «по умолчанию». */
-const effectiveBlock2Subtitle = (param) => {
-  const t = trimBlock2Subtitle(param?.subtitle);
-  return t || '__default__';
 };
 
 const escapeHtml = (value = '') => String(value)
@@ -266,6 +209,56 @@ const isOperationsRcBlock = (block) => {
   return n.includes('ПЕРЕЧЕНЬ') && n.includes('ОПЕРАЦ') && n.includes('РК');
 };
 
+const trimBlock2Subtitle = (s) => (s == null ? '' : String(s).trim());
+
+const isBlock2ObjectControlSubtitle = (subtitle) => {
+  const t = trimBlock2Subtitle(subtitle).toLowerCase();
+  if (!t) {
+    return false;
+  }
+  if (t === String(PARAM_SUBTITLE_BLOCK2.GENERAL).toLowerCase()) {
+    return true;
+  }
+  return t.includes('объект') && t.includes('контрол');
+};
+
+const isBlock2WeldDiagramSubtitle = (subtitle) => {
+  const t = trimBlock2Subtitle(subtitle).toLowerCase();
+  if (!t) {
+    return false;
+  }
+  if (t === String(PARAM_SUBTITLE_BLOCK2.WELD_PARAMETERS).toLowerCase()) {
+    return true;
+  }
+  if (t.includes('параметр') && t.includes('сварн')) {
+    return true;
+  }
+  return false;
+};
+
+const isBlock2RequirementsSubtitle = (subtitle) => {
+  const t = trimBlock2Subtitle(subtitle).toLowerCase();
+  if (!t) {
+    return false;
+  }
+  if (t === String(PARAM_SUBTITLE_BLOCK2.REQUIREMENTS).toLowerCase()) {
+    return true;
+  }
+  return t.includes('требован') && (t.includes('проведен') || t.includes('контрол'));
+};
+
+const isBlock2DiagramZoneSubtitle = (subtitle) => isBlock2WeldDiagramSubtitle(subtitle)
+  || isBlock2RequirementsSubtitle(subtitle);
+
+const block2SubtitleModeEnabled = (params) => params.some(
+  (p) => trimBlock2Subtitle(p?.subtitle) !== '',
+);
+
+const effectiveBlock2Subtitle = (param) => {
+  const t = trimBlock2Subtitle(param?.subtitle);
+  return t || '__default__';
+};
+
 const readBlobAsDataUrl = (blob) => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => resolve(reader.result);
@@ -397,11 +390,9 @@ const buildOfficialBlock1Html = (block, paramValues, imageSrcMap, paramValues2 =
 };
 
 /**
- * Блок «Объект контроля» с subtitle:
- * — слева «N. ОБЪЕКТ КОНТРОЛЯ» только на строках с subtitle «ОБЪЕКТ КОНТРОЛЯ» / general;
- * — подряд секции «Параметры сварного соединения» и «Требования к проведению контроля»;
- * — справа одна ячейка с рисунком на всю высоту обеих секций (всего 3 колонки: имя | значение | схема);
- * — если нет строки section_header, перед параметрами группы выводится строка с текстом subtitle.
+ * Блок «Объект контроля» с subtitle: левая подпись только на группе «ОБЪЕКТ КОНТРОЛЯ»;
+ * зона «Параметры сварного соединения» + «Требования…» — 3 колонки (имя | значение | схема);
+ * при отсутствии section_header сверху группы подставляется строка с текстом subtitle.
  */
 const buildOfficialBlock2GroupedHtml = (
   block,
@@ -615,8 +606,8 @@ const buildOfficialBlock2GroupedHtml = (
 };
 
 /**
- * Блок «Объект контроля»: слева подпись с rowspan, строки параметров, опционально вложенные подзаголовки;
- * справа объединённая ячейка со схемой шва (без subtitle — на всю высоту текстовой части).
+ * Блок «Объект контроля»: без subtitle — схема справа на всю высоту текстовой части;
+ * с subtitle — см. buildOfficialBlock2GroupedHtml.
  */
 const buildOfficialBlock2Html = (block, paramValues, imageSrcMap, paramValues2 = {}) => {
   const params = (block.params || []).filter((p) => !isOperationsRowParam(p));
@@ -723,25 +714,16 @@ const buildOfficialBlock3Html = (block, paramValues, imageSrcMap, paramValues2 =
     if (!src) {
       return '';
     }
-    const caption = escapeHtml(p.name || 'СХЕМА ПРОСВЕЧИВАНИЯ');
+    const caption = escapeHtml(p.name || 'Схема');
     return `
-      <div class="off-b3-scheme-title">${caption}</div>
       <div class="off-diagram-wrap off-b3-img"><img src="${src}" alt="${caption}" /></div>`;
   }).join('');
 
-  const diagramBody = diagramParts
-    || '<div class="off-b3-scheme-title">СХЕМА ПРОСВЕЧИВАНИЯ</div>';
-
-  const legend = `
-    <div class="off-b3-legend">
-      <div>И – источник ионизирующего излучения;</div>
-      <div>П – кассета с пленкой</div>
-    </div>`;
+  const diagramBody = diagramParts || '&#160;';
 
   const diagramCell = `
     <td class="off-b3-diagram" rowspan="__ROWSPAN__" align="center" valign="top">
       ${diagramBody}
-      ${legend}
     </td>`;
 
   const nDataRows = Math.max(textParams.length, 1);
@@ -1270,12 +1252,6 @@ const buildWordHtml = ({
         .off-b3-pname { width: 42%; vertical-align: top; }
         .off-b3-pval { width: 23%; vertical-align: top; }
         .off-b3-diagram { width: 35%; vertical-align: top; padding: 4pt; }
-        .off-b3-scheme-title {
-          font-weight: bold;
-          margin-bottom: 3pt;
-          text-align: center;
-        }
-        .off-b3-legend { margin-top: 4pt; font-size: 9pt; text-align: left; }
         .off-b3-footnote { font-size: 9pt; vertical-align: top; padding: 4pt; }
         .off-diagram-wrap { text-align: center; }
         .off-diagram-wrap img {
