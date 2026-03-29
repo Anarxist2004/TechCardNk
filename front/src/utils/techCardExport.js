@@ -1239,9 +1239,16 @@ const buildWordHtml = ({
           font-size: 9pt;
           line-height: 1.15;
         }
-        .off-b2-name { width: 44%; vertical-align: top; }
-        .off-b2-val { width: 18%; vertical-align: top; }
-        .off-b2-diagram { width: 26%; vertical-align: top; padding: 4pt; }
+        .off-b2-name { width: 44%; vertical-align: top; word-wrap: break-word; }
+        .off-b2-val { width: 18%; vertical-align: top; word-wrap: break-word; }
+        .off-b2-diagram {
+          width: 26%;
+          max-width: 26%;
+          vertical-align: top;
+          padding: 4pt;
+          overflow: hidden;
+          word-wrap: break-word;
+        }
         .off-b2-section {
           font-weight: bold;
           text-align: center;
@@ -1249,18 +1256,34 @@ const buildWordHtml = ({
         }
         .off-b3-banner { font-size: 11pt; padding: 4pt; }
         .off-b3-subhead { padding: 3pt; background: #f0f0f0; }
-        .off-b3-pname { width: 42%; vertical-align: top; }
-        .off-b3-pval { width: 23%; vertical-align: top; }
-        .off-b3-diagram { width: 35%; vertical-align: top; padding: 4pt; }
+        .off-b3-pname { width: 42%; vertical-align: top; word-wrap: break-word; }
+        .off-b3-pval { width: 23%; vertical-align: top; word-wrap: break-word; }
+        .off-b3-diagram {
+          width: 35%;
+          max-width: 35%;
+          vertical-align: top;
+          padding: 4pt;
+          overflow: hidden;
+          word-wrap: break-word;
+        }
         .off-b3-footnote { font-size: 9pt; vertical-align: top; padding: 4pt; }
-        .off-diagram-wrap { text-align: center; }
-        .off-diagram-wrap img {
+        .off-diagram-wrap {
+          text-align: center;
+          overflow: hidden;
           max-width: 100%;
-          max-height: 75mm;
+          box-sizing: border-box;
+          line-height: 0;
+        }
+        .off-diagram-wrap img {
+          display: block;
+          margin: 0 auto;
+          max-width: 100%;
           width: auto;
           height: auto;
+          max-height: 68mm;
+          object-fit: contain;
         }
-        .off-b3-img img { max-height: 85mm; }
+        .off-b3-img img { max-height: 68mm; }
         .off-empty { padding: 6pt; color: #444; font-style: italic; }
         .block-table {
           width: 100%;
@@ -1298,15 +1321,24 @@ const buildWordHtml = ({
           background: #f8f8f8;
           font-weight: 700;
         }
-        .image-row td { padding: 4mm; }
-        .image-wrapper { text-align: center; }
+        .image-row td { padding: 4mm; overflow: hidden; max-width: 100%; }
+        .image-wrapper {
+          text-align: center;
+          overflow: hidden;
+          max-width: 100%;
+          box-sizing: border-box;
+        }
         .image-caption { margin-bottom: 2mm; font-weight: 600; }
         .image-wrapper img {
+          display: block;
+          margin: 0 auto;
           max-width: 100%;
-          max-height: 110mm;
+          width: auto;
+          height: auto;
+          max-height: 95mm;
           object-fit: contain;
         }
-        .image-wrapper-full img { max-height: 175mm; }
+        .image-wrapper-full img { max-height: 130mm; }
         .extra-images-section { margin-top: 4mm; }
         .extra-images-title { margin-bottom: 2mm; font-weight: 700; }
         .extra-images-grid {
