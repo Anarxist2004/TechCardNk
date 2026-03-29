@@ -7,6 +7,7 @@ from services.PipeLine import PipeLine
 from services.tech_card_service import TechCardService
 from services.Changers.ch_ControlMethodsFromDb import ControlMethodsFromDb
 from services.Changers.ch_RegulatoryDocumentsFromDb import RegulatoryDocumentsFromDb
+from services.Changers.ch_TypeOfWeldedJointFromDb import TypeOfWeldedJointFromDb
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
@@ -17,6 +18,7 @@ def create_pipeline(repos: PostgresDataBase) -> PipeLine:
     pipe_line = PipeLine()
     pipe_line.addChanger(ControlMethodsFromDb(repos), 0)
     pipe_line.addChanger(RegulatoryDocumentsFromDb(repos), 0)
+    pipe_line.addChanger(TypeOfWeldedJointFromDb(repos), 0)
     return pipe_line
 
 

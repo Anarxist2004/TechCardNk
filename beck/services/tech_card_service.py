@@ -185,7 +185,6 @@ class TechCardService(IServise):
         return techCard
 
     def updateTechCard(self, techCard) -> TechCardData:
-        methodology_id = 0
         self.pipeLine.process(techCard, 0)
         return techCard
 

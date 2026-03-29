@@ -188,7 +188,19 @@ class TechCardData:
                         return param.get("val")
                 return None
         return None
-    
+
+    def set_param_value(self, block_name: str, param_name: str, value: Any) -> bool:
+        for block in self.params.values():
+            if block.get("name") != block_name:
+                continue
+            params = block.get("params", {})
+            for param in params.values():
+                if param.get("name") == param_name:
+                    param["val"] = value
+                    return True
+            return False
+        return False
+
     def _parse_id(self, key) -> list[int]:
         if isinstance(key, int):
             return [key]
