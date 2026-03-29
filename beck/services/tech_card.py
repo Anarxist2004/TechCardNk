@@ -215,6 +215,19 @@ class TechCardData:
             return False
         return False
 
+    def remove_param_from_block(self, block_name: str, param_name: str) -> bool:
+        """Удаляет параметр по имени из блока (первое совпадение)."""
+        for block in self.params.values():
+            if block.get("name") != block_name:
+                continue
+            params = block.get("params", {})
+            for k, v in list(params.items()):
+                if v.get("name") == param_name:
+                    del params[k]
+                    return True
+            return False
+        return False
+
     def _parse_id(self, key) -> list[int]:
         if isinstance(key, int):
             return [key]

@@ -72,17 +72,6 @@ class TechCardService(IServise):
         )
         card.insert_param_to_block(
             card.get("3")["name"],
-            2,
-            {
-                "name": "Схема",
-                "val": {"image": None},
-                "options": [],
-                "typeData": "string",
-                "displayMode": None,
-            },
-        )
-        card.insert_param_to_block(
-            card.get("3")["name"],
             3,
             {"name": "Радиационная толщина, мм", "val": None},
         )

@@ -39,10 +39,14 @@ class WeldedJointDiagramFromDb(IDataChanger[TechCardData]):
 
         image_ref = self._db.get_welded_joint_image_ref(joint_val)
         if not image_ref:
+            if data.has_block_and_param(self.BLOCK_OBJECT, self.PARAM_SCHEME):
+                data.set_param_value(self.BLOCK_OBJECT, self.PARAM_SCHEME, {})
             return data
 
         url = _public_image_url(image_ref)
         if not url:
+            if data.has_block_and_param(self.BLOCK_OBJECT, self.PARAM_SCHEME):
+                data.set_param_value(self.BLOCK_OBJECT, self.PARAM_SCHEME, {})
             return data
 
         scheme_val = {"image": url}
