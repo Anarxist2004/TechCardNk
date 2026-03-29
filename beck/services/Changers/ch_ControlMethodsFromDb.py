@@ -15,7 +15,7 @@ def _is_empty_val(val) -> bool:
 
 class ControlMethodsFromDb(IDataChanger[TechCardData]):
     """
-    Блок «ОТК РК…»: параметр «НАИМЕНОВАНИЕ ОБЪЕКТА».
+    Блок «ОТК РК…»: параметр «МЕТОДИКА КОНТРОЛЯ».
     Если параметра нет или значение пустое — подставляет массив имён из control_methods.
     """
 
@@ -23,7 +23,7 @@ class ControlMethodsFromDb(IDataChanger[TechCardData]):
         "ОПЕРАЦИОННАЯ ТЕХНОЛОГИЧЕСКАЯ КАРТА РАДИОГРАФИЧЕСКОГО КОНТРОЛЯ "
         "СВАРНЫХ СОЕДИНЕНИЙ"
     )
-    PARAM_NAME = "НАИМЕНОВАНИЕ ОБЪЕКТА"
+    PARAM_NAME = "МЕТОДИКА КОНТРОЛЯ"
 
     def __init__(self, db: IControlMethodsDB):
         self._db = db
