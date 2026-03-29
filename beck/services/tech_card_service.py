@@ -180,7 +180,9 @@ class TechCardService(IServise):
         return card
 
     def get_template(self) -> TechCardData:
-        return self.crateTemplateTechCars()
+        techCard=self.crateTemplateTechCars()
+        self.pipeLine.process(techCard, 0)
+        return techCard
 
     def updateTechCard(self, techCard) -> TechCardData:
         methodology_id = 0
