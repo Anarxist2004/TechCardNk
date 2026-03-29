@@ -5,81 +5,186 @@ from services.Interfaces.i_servise import IServise
 
 
 class TechCardService(IServise):
-    GAZPROM_METHODOLOGY = 1
-    GAZPROM_OPERATIONAL_METHODOLOGY = 2
 
-    METHODOLOGIES = {
-        GAZPROM_METHODOLOGY: "Газпром",
-        GAZPROM_OPERATIONAL_METHODOLOGY: "Газпром 2",
-    }
-
-    def __init__(self, repos: dict[int, IRepository], piLine: PipeLine):
+    def __init__(self, repos: IRepository, piLine: PipeLine):
         self.repos = repos
         self.pipeLine = piLine
 
-    def _normalise_methodology(self, methodology) -> int:
-        try:
-            methodology_id = int(methodology)
-        except (TypeError, ValueError):
-            methodology_id = self.GAZPROM_METHODOLOGY
+    def crateTemplateTechCars(self) -> TechCardData:
+        card = TechCardData()
+        card.set(
+            "1",
+            {
+                "name": "ОПЕРАЦИОННАЯ ТЕХНОЛОГИЧЕСКАЯ КАРТА РАДИОГРАФИЧЕСКОГО КОНТРОЛЯ СВАРНЫХ СОЕДИНЕНИЙ",
+                "params": {},
+            },
+        )
+        card.insert_param_to_block(
+            card.get("1")["name"],
+            1,
+            {"name": "Шифр", "val": "ТК-РК 1420х26,4"},
+        )
+        card.insert_param_to_block(
+            card.get("1")["name"],
+            1,
+            {"name": "НАИМЕНОВАНИЕ ОРГАНИЗАЦИИ", "val": None},
+        )
+        card.insert_param_to_block(
+            card.get("1")["name"],
+            2,
+            {"name": "НОМЕР ЧЕРТЕЖА (ЭСКИЗА)", "val": None},
+        )
+        card.insert_param_to_block(
+            card.get("1")["name"],
+            3,
+            {"name": "НАИМЕНОВАНИЕ ОБЪЕКТА", "val": None},
+        )
+        card.insert_param_to_block(
+            card.get("1")["name"],
+            4,
+            {"name": "МЕТОДИКА КОНТРОЛЯ", "val": None},
+        )
+        card.insert_param_to_block(
+            card.get("1")["name"],
+            5,
+            {"name": "НОРМАТИВНЫЕ ДОКУМЕНТЫ", "val": None},
+        )
 
-        if methodology_id not in self.repos:
-            return self.GAZPROM_METHODOLOGY
+        card.set("2", {"name": "Объект контроля", "params": {}})
+        card.insert_param_to_block(
+            card.get("2")["name"],
+            1,
+            {"name": "Тип сварного соединения", "val": None},
+        )
+        card.insert_param_to_block(
+            card.get("2")["name"],
+            2,
+            {"name": "Тип сварки", "val": None},
+        )
 
-        return methodology_id
+        card.set("3", {"name": "ИСХОДНЫЕ ДАННЫЕ", "params": {}})
+        card.insert_param_to_block(
+            card.get("3")["name"],
+            1,
+            {"name": "схема просвечивания", "val": None},
+        )
 
-    def _get_repo(self, methodology) -> IRepository:
-        methodology_id = self._normalise_methodology(methodology)
-        return self.repos[methodology_id]
+        card.set("4", {"name": "ПЕРЕЧЕНЬ ОПЕРАЦИЙ РК", "params": {}})
+        card.insert_param_to_block(
+            card.get("4")["name"],
+            1,
+            {
+                "name": "3.1 Подготовка к контролю",
+                "val": (
+                    "3.1.1 РК проводить после ВИК pw[epwe[ woek weofki]] и устранения обнаруженных дефектов.\n"
+                    "3.1.2 Отметить на сварном соединении маркером направление укладки кассет с радиографической пленкой, "
+                    "начало укладки кассет и установки мерительного пояса (на 12 часах по часовой стрелке по ходу "
+                    "транспортируемого продукта).\n"
+                    "3.1.3 Установить на сварное соединение:\n"
+                    "— мерительный пояс со свинцовыми цифрами;\n"
+                    "— эталоны чувствительности со стороны кассет с пленками (по одному на каждую четверть окружности "
+                    "сварного соединения);\n"
+                    "— маркировочные знаки и ограничительные метки № __ по ГОСТ 15843.\n"
+                    "3.1.4 Установить на сварное соединение радиографическую пленку с помощью кассетного пояса "
+                    "(или отрезок рулонной пленки соответствующей длины) так, чтобы обеспечить плотное прилегание пленки "
+                    "к металлу шва и перекрытие изображений смежных участков не менее чем на 20 мм (в том случае, если не "
+                    "используется рулонная пленка).\n"
+                    "3.1.5 Оградить знаками радиационной опасности радиационно-опасную зону и установить предупреждающий "
+                    "сигнализатор (со звуковой или световой сигнализацией) в соответствии с утвержденной в организации "
+                    "инструкцией по радиационной безопасности.\n"
+                    "3.1.6 Записать показания индивидуальных дозиметров."
+                ),
+                "val2": (
+                    "Мерительный пояс; кассетный пояс; эталоны чувствительности; маркер по металлу; "
+                    "свинцовые маркировочные знаки; светонепроницаемые кассеты с форматной радиографической пленкой "
+                    "или рулонная радиографическая пленка; индивидуальные дозиметры типа ИД-02, ДК-02, РМ 03-04; "
+                    "предупреждающий сигнализатор (звуковой или световой); дозиметр типа ДКС-04."
+                ),
+            },
+        )
+        card.insert_param_to_block(
+            card.get("4")["name"],
+            2,
+            {
+                "name": "3.2 Просвечивание сварного соединения",
+                "val": (
+                    "3.2.1 Установить ИИИ согласно схеме просвечивания.\n"
+                    "3.2.2 Убедиться в отсутствии людей в зоне излучения, включить предупреждающий сигнализатор "
+                    "(при его наличии).\n"
+                    "3.2.3 Отойти на безопасное расстояние и произвести просвечивание.\n"
+                    "3.2.4 По окончании просвечивания снять радиографическую пленку со сварного соединения.\n"
+                    "3.2.5 По окончании контроля отключить ИИИ.\n"
+                    "3.2.6 Просвеченные радиографические пленки передать на проявку.\n"
+                    "3.2.7 По окончании рабочей смены проверить и записать показания индивидуальных дозиметров."
+                ),
+                "val2": "Рулетка; ИИИ; секундомер.",
+            },
+        )
+        card.insert_param_to_block(
+            card.get("4")["name"],
+            3,
+            {
+                "name": "3.3 Фотообработка радиографической пленки",
+                "val": (
+                    "3.3.1 Фотообработку радиографических снимков следует проводить в специально оборудованной "
+                    "фотолаборатории при неактиничном освещении в баках-танках (танковая фотообработка) в соответствии с "
+                    "рекомендациями организации-изготовителя пленки.\n"
+                    "3.3.2 Проверить пригодность и температуру обрабатывающих растворов. Они должны иметь температуру в "
+                    "пределах от 15 °С до 25 °С. При этом следует иметь в виду, что проявитель готов к применению не ранее "
+                    "чем через 12 часов после приготовления, а также, что в одном литре проявителя может быть качественно "
+                    "обработано не более 1 м² пленки, а фиксаж пригоден к работе, если в одном литре его обработано не более "
+                    "1,2 м² пленки.\n"
+                    "3.3.3 Оптимальное время проявления при температуре проявителя 20 °С указывается на этикетке первичной "
+                    "упаковки. Время проявления в проявителе устанавливать в зависимости от фактической температуры "
+                    "проявления.\n"
+                    "3.3.4 Режимы промывок, фиксирования и сушки выбирать следующие:\n"
+                    "— промежуточная промывка — не менее одной минуты при температуре от 12 °С до 28 °С;\n"
+                    "— фиксирование в фиксирующем растворе — не менее 10 минут при температуре (20 ± 5) °С;\n"
+                    "— окончательная промывка в проточной или сменной (не менее 3 раз) воде — не менее 15 минут при "
+                    "температуре от 12 °С до 28 °С;\n"
+                    "— сушка естественная или в потоке воздуха — до полного высыхания при температуре не выше 35 °С.\n"
+                    "3.3.5 В случае применения автоматов для фотообработки радиографических пленок режимы фотообработки "
+                    "определяются инструкцией по эксплуатации применяемого автомата."
+                ),
+                "val2": "Термометр для измерения температуры растворов; неактиничный фонарь; часы.",
+            },
+        )
+        card.insert_param_to_block(
+            card.get("4")["name"],
+            4,
+            {
+                "name": "3.4 Расшифровка снимков",
+                "val": (
+                    "3.4.1 Просмотр и расшифровку снимков производить после их полного высыхания с применением "
+                    "негатоскопов, отвечающих требованиям ГОСТ 7512.\n"
+                    "3.4.2 Снимки допускаются к расшифровке, если они удовлетворяют следующим требованиям:\n"
+                    "— на снимках отсутствуют пятна, полосы, загрязнения и повреждения эмульсионного слоя, затрудняющие "
+                    "расшифровку;\n"
+                    "— на снимках должны быть видны изображения эталонов чувствительности (по одному на каждую четверть "
+                    "сварного соединения), изображения ограничительных меток и маркировка, включающая в себя направление "
+                    "укладки кассет, номер пленки, шифр (характеристика) объекта, номер сварного соединения, шифр "
+                    "(клеймо сварщика или бригады), шифр (клеймо дефектоскописта), дату проведения контроля;\n"
+                    "— оптическая плотность изображений контролируемого участка и эталона чувствительности и уменьшение "
+                    "оптической плотности изображения сварного соединения на любом участке этого изображения по сравнению с "
+                    "оптической плотностью эталона чувствительности должны соответствовать ГОСТ 7512;\n"
+                    "— чувствительность контроля в соответствии с СТО Газпром 2-2.4-083.\n"
+                    "3.4.3 По результатам расшифровки заполнить заключение."
+                ),
+                "val2": (
+                    "Негатоскоп; денситометр; трафарет для оценки размеров изображений несплошностей; "
+                    "линейка измерительная с ценой деления 1 мм; лупа измерительная с ценой деления шкалы 0,1 мм."
+                ),
+            },
+        )
+        card.sort_all_params()
+        return card
 
-    def findNewParamsByTechCard(self, data: TechCardData) -> None:
-        _ = data
-        return
-
-    def setData(self, data: TechCardData) -> None:
-        _ = data
-
-    def getObjectControl(self, methodology=0) -> TechCardData:
-        repo = self._get_repo(methodology)
-        return repo.get_all_controlled_element_types()
-
-    def getControlElements(self, id, methodology=0) -> TechCardData:
-        repo = self._get_repo(methodology)
-        return repo.get_all_objects_by_type_id(id)
-
-    def getControlElementParam(self, id, methodology=0) -> TechCardData:
-        methodology_id = self._normalise_methodology(methodology)
-        repo = self._get_repo(methodology_id)
-        tech_card = repo.get_params_for_type(id)
-        self.pipeLine.process(tech_card, methodology_id)
-        return tech_card
-
-    def getControlElementParamValue(self, idCntlEl, idParam) -> TechCardData:
-        repo = self._get_repo(self.GAZPROM_METHODOLOGY)
-        return repo.get_all_possible_values_by_param_and_element(idCntlEl, idParam)
-
-    def geElementParamsValue(self, id, methodology=0) -> TechCardData:
-        methodology_id = self._normalise_methodology(methodology)
-        repo = self._get_repo(methodology_id)
-        tech_card = repo.get_params_for_element(id)
-        self.pipeLine.process(tech_card, methodology_id)
-        return tech_card
+    def get_template(self) -> TechCardData:
+        return self.crateTemplateTechCars()
 
     def updateTechCard(self, techCard) -> TechCardData:
-        methodology_id = self._normalise_methodology(techCard.getMethodology())
-        repo = self._get_repo(methodology_id)
-        techCard.methodology = methodology_id
-        techCard = repo.sync_tech_card(techCard)
-        self.pipeLine.process(techCard, methodology_id)
+        methodology_id = 0
+        self.pipeLine.process(techCard, 0)
         return techCard
 
-    def getMethodologies(self) -> dict[int, str]:
-        return dict(self.METHODOLOGIES)
 
-    def createParamOption(self, payload) -> dict:
-        methodology = self.GAZPROM_METHODOLOGY
-        if isinstance(payload, dict):
-            methodology = payload.get("methodology", self.GAZPROM_METHODOLOGY)
-
-        repo = self._get_repo(methodology)
-        return repo.create_param_option(payload if isinstance(payload, dict) else {})

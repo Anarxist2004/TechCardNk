@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ChevronDown,
@@ -17,20 +17,13 @@ import api from '../services/api';
 import { buildTechCardPayload, updateTechCard } from '../data/formConfig';
 import { exportTechCardToWord } from '../utils/techCardExport';
 
-const GAZPROM_METHODOLOGY_ID = '1';
-const GAZPROM_METHODOLOGY_NAME = 'Газпром';
-const GAZPROM_2_METHODOLOGY_ID = '2';
+const DEFAULT_METHODOLOGY = 0;
 const DISPLAY_MODE_NUMBER_ONLY = 'number_only';
 const DISPLAY_MODE_IMAGE_FULL = 'image_full';
 const DISPLAY_MODE_SECTION_HEADER = 'section_header';
 const DISPLAY_MODE_OPERATIONS_ROW = 'operations_row';
 const GAZPROM_SCHEME_PARAM_KEY = '6.1';
 const DEFAULT_ACTIVE_TAB = 'overview';
-
-const METHODOLOGY_OPTIONS = [
-  { id: GAZPROM_METHODOLOGY_ID, label: GAZPROM_METHODOLOGY_NAME },
-  { id: GAZPROM_2_METHODOLOGY_ID, label: 'Газпром 2' },
-];
 
 const BLOCK_TAB_GROUPS = [
   {
@@ -149,6 +142,28 @@ const isSelectedValueObject = (value) => (
 
 const getInputValueFromParam = (param, fallbackValue = '') => {
   const rawValue = param?.value;
+
+  if (rawValue === null || rawValue === undefined || Array.isArray(rawValue)) {
+    return fallbackValue;
+  }
+
+  if (typeof rawValue === 'object') {
+    if (rawValue.name !== undefined) {
+      return String(rawValue.name);
+    }
+
+    if (rawValue.id !== undefined) {
+      return String(rawValue.id);
+    }
+
+    return fallbackValue;
+  }
+
+  return String(rawValue);
+};
+
+const getInputValue2FromParam = (param, fallbackValue = '') => {
+  const rawValue = param?.value2;
 
   if (rawValue === null || rawValue === undefined || Array.isArray(rawValue)) {
     return fallbackValue;
@@ -292,6 +307,30 @@ const getReadOnlyParamValue = (param, compositeKey, values) => {
   return normalizeStaticValue(sourceValue);
 };
 
+const getReadOnlyParamDisplay = (param, compositeKey, values, values2 = {}) => {
+  const primary = getReadOnlyParamValue(param, compositeKey, values);
+  if (!param.hasVal2) {
+    return primary;
+  }
+
+  const hasOverride2 = Object.prototype.hasOwnProperty.call(values2, compositeKey);
+  const override2 = values2[compositeKey];
+  const secondary = hasOverride2 && override2 !== '' && override2 !== null && override2 !== undefined
+    ? String(override2).trim()
+    : normalizeStaticValue(param.value2);
+
+  if (!primary && !secondary) {
+    return '';
+  }
+  if (!secondary) {
+    return primary;
+  }
+  if (!primary) {
+    return secondary;
+  }
+  return `${primary} – ${secondary}`;
+};
+
 const getOperationsRowValue = (param) => {
   const rawValue = (param?.value && typeof param.value === 'object' && !Array.isArray(param.value))
     ? param.value
@@ -305,6 +344,7 @@ const getOperationsRowValue = (param) => {
 
 const buildFormStateFromBlocks = (blocks = []) => {
   const values = {};
+  const values2 = {};
   const selectedIds = {};
 
   blocks.forEach((block) => {
@@ -312,6 +352,9 @@ const buildFormStateFromBlocks = (blocks = []) => {
       const compositeKey = `${block.id}.${param.id}`;
       if (isEditableParam(param)) {
         values[compositeKey] = getInputValueFromParam(param, '');
+        if (param.hasVal2) {
+          values2[compositeKey] = getInputValue2FromParam(param, '');
+        }
       }
 
       const selectedId = getSelectedIdFromParam(param);
@@ -321,7 +364,7 @@ const buildFormStateFromBlocks = (blocks = []) => {
     });
   });
 
-  return { values, selectedIds };
+  return { values, values2, selectedIds };
 };
 
 const buildStandardValuesCacheFromBlocks = (blocks = []) => {
@@ -448,22 +491,29 @@ const TableRowInput = ({
   paramKey,
   paramName,
   value,
+  value2 = '',
   onChange,
+  onChange2,
   onCreateOption,
   standardValues,
   typeData,
   displayMode,
   canCreateOption,
   isCreatingOption,
+  hasVal2 = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [touched2, setTouched2] = useState(false);
   const [dropdownStyle, setDropdownStyle] = useState(null);
   const textareaRef = React.useRef(null);
+  const textarea2Ref = React.useRef(null);
   const dropdownAnchorRef = React.useRef(null);
 
   const validation = validateByType(value, typeData);
+  const validation2 = hasVal2 ? validateByType(value2, typeData) : { isValid: true, error: null };
   const showError = touched && !validation.isValid;
+  const showError2 = hasVal2 && touched2 && !validation2.isValid;
   const typeHint = getTypeHint(typeData);
   const suggestionOptions = normalizeSuggestionOptions(standardValues);
   const isNumberOnlyMode = displayMode === DISPLAY_MODE_NUMBER_ONLY;
@@ -483,6 +533,15 @@ const TableRowInput = ({
     textareaRef.current.style.height = '0px';
     textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
   }, [value]);
+
+  useEffect(() => {
+    if (!hasVal2 || !textarea2Ref.current) {
+      return;
+    }
+
+    textarea2Ref.current.style.height = '0px';
+    textarea2Ref.current.style.height = `${textarea2Ref.current.scrollHeight}px`;
+  }, [value2, hasVal2]);
 
   useEffect(() => {
     if (!isOpen || suggestionOptions.length === 0) {
@@ -523,6 +582,23 @@ const TableRowInput = ({
     onChange(nextValue, null);
   };
 
+  const handleChange2 = (nextValue) => {
+    if (!onChange2) {
+      return;
+    }
+    const normalizedType = (typeData || 'string').toLowerCase();
+
+    if ((normalizedType === 'int' || normalizedType === 'integer') && nextValue !== '' && !/^-?\d*$/.test(nextValue)) {
+      return;
+    }
+
+    if (['double', 'float', 'real'].includes(normalizedType) && nextValue !== '' && !/^-?\d*[.,]?\d*$/.test(nextValue)) {
+      return;
+    }
+
+    onChange2(nextValue);
+  };
+
   return (
     <tr className="border-b border-[#646C89]/20 hover:bg-[#646C89]/10">
       {!isNumberOnlyMode && (
@@ -538,56 +614,150 @@ const TableRowInput = ({
       <td
         colSpan={isNumberOnlyMode ? 2 : undefined}
         className="py-2 px-2 align-top"
-        style={isNumberOnlyMode ? undefined : { width: '400px', minWidth: '400px' }}
+        style={isNumberOnlyMode ? undefined : {
+          width: hasVal2 ? '560px' : '400px',
+          minWidth: hasVal2 ? '560px' : '400px',
+        }}
       >
         <div className={isNumberOnlyMode ? 'flex items-start gap-3 w-full' : ''}>
           {isNumberOnlyMode && (
             <span className="text-[#D97B54] font-mono text-sm shrink-0 pt-1">{paramKey}</span>
           )}
-          <div ref={dropdownAnchorRef} className={isNumberOnlyMode ? 'relative flex-1 min-w-0' : 'relative'}>
-            <textarea
-              ref={textareaRef}
-              value={value}
-              onChange={(event) => handleChange(event.target.value)}
-              onBlur={() => setTouched(true)}
-              placeholder="Введите значение"
-              rows={1}
-              className={`
-                w-full bg-[#0C1515] border
-                rounded px-3 py-1.5 ${hasActionButtons ? 'pr-14' : 'pr-3'}
-                text-white placeholder-[#646C89]
-                focus:outline-none
-                transition-colors text-sm
-                resize-none
-                ${showError
-                  ? 'border-red-500 focus:border-red-500'
-                  : 'border-[#646C89]/50 focus:border-[#D97B54]'
-                }
-              `}
-              style={{ height: 'auto', minHeight: '28px', overflow: 'hidden', lineHeight: '1.4' }}
-            />
-            {(canSaveOption || isCreatingOption) && (
-              <button
-                type="button"
-                onClick={() => onCreateOption?.()}
-                disabled={isCreatingOption}
-                className={`absolute top-1/2 -translate-y-1/2 text-[#646C89] hover:text-[#35C759] ${suggestionOptions.length > 0 ? 'right-8' : 'right-2'}`}
-                title="Сохранить значение в справочник"
-              >
-                {isCreatingOption ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-              </button>
-            )}
-            {suggestionOptions.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setIsOpen((prev) => !prev)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-[#646C89] hover:text-[#D97B54]"
-              >
-                <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-              </button>
-            )}
-            {showError && (
-              <span className="text-xs text-red-500 mt-0.5 block">{validation.error}</span>
+          <div
+            ref={dropdownAnchorRef}
+            className={isNumberOnlyMode ? 'relative flex-1 min-w-0' : hasVal2 ? 'relative w-full min-w-0' : 'relative'}
+          >
+            {hasVal2 ? (
+              <div className="w-full space-y-1">
+                <div className="flex flex-row items-end gap-2 w-full">
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[10px] text-[#646C89] block mb-0.5">val</span>
+                    <div className="relative">
+                      <textarea
+                        ref={textareaRef}
+                        value={value}
+                        onChange={(event) => handleChange(event.target.value)}
+                        onBlur={() => setTouched(true)}
+                        placeholder="Значение"
+                        rows={1}
+                        className={`
+                          w-full bg-[#0C1515] border
+                          rounded px-3 py-1.5 ${hasActionButtons ? 'pr-14' : 'pr-3'}
+                          text-white placeholder-[#646C89]
+                          focus:outline-none
+                          transition-colors text-sm
+                          resize-none
+                          ${showError
+                            ? 'border-red-500 focus:border-red-500'
+                            : 'border-[#646C89]/50 focus:border-[#D97B54]'
+                          }
+                        `}
+                        style={{ height: 'auto', minHeight: '28px', overflow: 'hidden', lineHeight: '1.4' }}
+                      />
+                      {(canSaveOption || isCreatingOption) && (
+                        <button
+                          type="button"
+                          onClick={() => onCreateOption?.()}
+                          disabled={isCreatingOption}
+                          className={`absolute top-1/2 -translate-y-1/2 text-[#646C89] hover:text-[#35C759] ${suggestionOptions.length > 0 ? 'right-8' : 'right-2'}`}
+                          title="Сохранить значение в справочник"
+                        >
+                          {isCreatingOption ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                        </button>
+                      )}
+                      {suggestionOptions.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setIsOpen((prev) => !prev)}
+                          className="absolute top-1/2 -translate-y-1/2 right-2 text-[#646C89] hover:text-[#D97B54]"
+                        >
+                          <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-[#646C89] shrink-0 select-none pb-2" aria-hidden>–</span>
+                  <div className="relative flex-1 min-w-0">
+                    <span className="text-[10px] text-[#646C89] block mb-0.5">val2</span>
+                    <textarea
+                      ref={textarea2Ref}
+                      value={value2}
+                      onChange={(event) => handleChange2(event.target.value)}
+                      onBlur={() => setTouched2(true)}
+                      placeholder="Значение"
+                      rows={1}
+                      className={`
+                        w-full bg-[#0C1515] border
+                        rounded px-3 py-1.5 pr-3
+                        text-white placeholder-[#646C89]
+                        focus:outline-none
+                        transition-colors text-sm
+                        resize-none
+                        ${showError2
+                          ? 'border-red-500 focus:border-red-500'
+                          : 'border-[#646C89]/50 focus:border-[#D97B54]'
+                        }
+                      `}
+                      style={{ height: 'auto', minHeight: '28px', overflow: 'hidden', lineHeight: '1.4' }}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-row gap-2">
+                  {showError && (
+                    <span className="text-xs text-red-500 flex-1 min-w-0">{validation.error}</span>
+                  )}
+                  {showError2 && (
+                    <span className="text-xs text-red-500 flex-1 min-w-0">{validation2.error}</span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                <textarea
+                  ref={textareaRef}
+                  value={value}
+                  onChange={(event) => handleChange(event.target.value)}
+                  onBlur={() => setTouched(true)}
+                  placeholder="Введите значение"
+                  rows={1}
+                  className={`
+                    w-full bg-[#0C1515] border
+                    rounded px-3 py-1.5 ${hasActionButtons ? 'pr-14' : 'pr-3'}
+                    text-white placeholder-[#646C89]
+                    focus:outline-none
+                    transition-colors text-sm
+                    resize-none
+                    ${showError
+                      ? 'border-red-500 focus:border-red-500'
+                      : 'border-[#646C89]/50 focus:border-[#D97B54]'
+                    }
+                  `}
+                  style={{ height: 'auto', minHeight: '28px', overflow: 'hidden', lineHeight: '1.4' }}
+                />
+                {(canSaveOption || isCreatingOption) && (
+                  <button
+                    type="button"
+                    onClick={() => onCreateOption?.()}
+                    disabled={isCreatingOption}
+                    className={`absolute top-1/2 -translate-y-1/2 text-[#646C89] hover:text-[#35C759] ${suggestionOptions.length > 0 ? 'right-8' : 'right-2'}`}
+                    title="Сохранить значение в справочник"
+                  >
+                    {isCreatingOption ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                  </button>
+                )}
+                {suggestionOptions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setIsOpen((prev) => !prev)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[#646C89] hover:text-[#D97B54]"
+                  >
+                    <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                )}
+                {showError && (
+                  <span className="text-xs text-red-500 mt-0.5 block">{validation.error}</span>
+                )}
+              </>
             )}
 
             {isOpen && suggestionOptions.length > 0 && dropdownStyle && createPortal(
@@ -711,10 +881,13 @@ const TechCardForm = () => {
   const [blocks, setBlocks] = useState([]);
   const [loadingBlocks, setLoadingBlocks] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [selectedMethodology, setSelectedMethodology] = useState(GAZPROM_METHODOLOGY_ID);
   const [objectType, setObjectType] = useState(null);
   const [paramValues, setParamValues] = useState({});
+  const [paramValues2, setParamValues2] = useState({});
   const [selectedOptionIds, setSelectedOptionIds] = useState({});
+  const paramValuesRef = useRef({});
+  const paramValues2Ref = useRef({});
+  const selectedOptionIdsRef = useRef({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [collapsedBlocks, setCollapsedBlocks] = useState({});
@@ -723,13 +896,22 @@ const TechCardForm = () => {
   const [standardValuesCache, setStandardValuesCache] = useState({});
   const [savingOptionKey, setSavingOptionKey] = useState(null);
   const [activeTabId, setActiveTabId] = useState(DEFAULT_ACTIVE_TAB);
-  const activeMethodology = METHODOLOGY_OPTIONS.find((option) => option.id === selectedMethodology)
-    || METHODOLOGY_OPTIONS[0];
+  const paramSyncTimerRef = useRef(null);
+  const clearParamSyncTimer = () => {
+    if (paramSyncTimerRef.current !== null) {
+      clearTimeout(paramSyncTimerRef.current);
+      paramSyncTimerRef.current = null;
+    }
+  };
 
   const resetLoadedTechCard = () => {
     setBlocks([]);
     setParamValues({});
+    setParamValues2({});
     setSelectedOptionIds({});
+    paramValuesRef.current = {};
+    paramValues2Ref.current = {};
+    selectedOptionIdsRef.current = {};
     setObjectType(null);
     setCollapsedBlocks({});
     setCustomFields({});
@@ -740,42 +922,49 @@ const TechCardForm = () => {
 
   const applyLoadedTechCard = (data) => {
     const nextBlocks = data.blocks || [];
-    const { values, selectedIds } = buildFormStateFromBlocks(nextBlocks);
+    const { values, values2, selectedIds } = buildFormStateFromBlocks(nextBlocks);
     const nextTabs = buildBlockTabs(nextBlocks);
 
     setBlocks(nextBlocks);
     setObjectType(data.type || null);
     setParamValues(values);
+    setParamValues2(values2);
     setSelectedOptionIds(selectedIds);
+    paramValuesRef.current = values;
+    paramValues2Ref.current = values2;
+    selectedOptionIdsRef.current = selectedIds;
     setStandardValuesCache(buildStandardValuesCacheFromBlocks(nextBlocks));
     setActiveTabId(nextTabs[0]?.id || DEFAULT_ACTIVE_TAB);
     setLoadError('');
   };
 
-  const loadTechCard = async (methodologyId = selectedMethodology) => {
+  const loadTechCard = async () => {
+    clearParamSyncTimer();
     setLoadingBlocks(true);
     setLoadError('');
 
     try {
-      const data = await api.getFullTechCard(methodologyId);
+      const data = await api.getTemplate(DEFAULT_METHODOLOGY);
       applyLoadedTechCard(data);
     } catch (error) {
-      console.error('Ошибка загрузки техкарты:', error);
-      const failedMethodology = METHODOLOGY_OPTIONS.find((option) => option.id === String(methodologyId));
+      console.error('Ошибка загрузки шаблона техкарты:', error);
       resetLoadedTechCard();
-      setLoadError(
-        failedMethodology
-          ? `Не удалось загрузить техкарту для методологии "${failedMethodology.label}".`
-          : 'Не удалось загрузить техкарту.',
-      );
+      setLoadError('Не удалось загрузить шаблон техкарты.');
     } finally {
       setLoadingBlocks(false);
     }
   };
 
   useEffect(() => {
-    loadTechCard(selectedMethodology);
-  }, [selectedMethodology]);
+    void loadTechCard();
+  }, []);
+
+  useEffect(() => () => {
+    if (paramSyncTimerRef.current !== null) {
+      clearTimeout(paramSyncTimerRef.current);
+      paramSyncTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     const availableTabs = buildBlockTabs(blocks);
@@ -791,15 +980,6 @@ const TechCardForm = () => {
       setActiveTabId(availableTabs[0].id);
     }
   }, [blocks, activeTabId]);
-
-  const handleMethodologySelect = (methodologyId) => {
-    if (methodologyId === selectedMethodology || loadingBlocks) {
-      return;
-    }
-
-    setLoadingBlocks(true);
-    setSelectedMethodology(methodologyId);
-  };
 
   const addCustomField = (blockId) => {
     setCustomFields((prev) => ({
@@ -884,7 +1064,12 @@ const TechCardForm = () => {
     return progressParams.every((param) => {
       const compositeKey = `${block.id}.${param.id}`;
       const value = paramValues[compositeKey];
-      return value && value.trim() !== '';
+      const primaryOk = value && String(value).trim() !== '';
+      if (!param.hasVal2) {
+        return primaryOk;
+      }
+      const value2 = paramValues2[compositeKey];
+      return primaryOk && value2 && String(value2).trim() !== '';
     });
   };
 
@@ -899,7 +1084,12 @@ const TechCardForm = () => {
     const filled = progressParams.filter((param) => {
       const compositeKey = `${block.id}.${param.id}`;
       const value = paramValues[compositeKey];
-      return value && value.trim() !== '';
+      const primaryOk = value && String(value).trim() !== '';
+      if (!param.hasVal2) {
+        return primaryOk;
+      }
+      const value2 = paramValues2[compositeKey];
+      return primaryOk && value2 && String(value2).trim() !== '';
     }).length;
 
     return { filled, total };
@@ -961,11 +1151,31 @@ const TechCardForm = () => {
       return false;
     }
 
-    if (selectedMethodology === GAZPROM_METHODOLOGY_ID && compositeKey === GAZPROM_SCHEME_PARAM_KEY) {
+    if (compositeKey === GAZPROM_SCHEME_PARAM_KEY) {
       return true;
     }
 
     return Boolean(getParamByCompositeKey(compositeKey)?.syncOnSelect);
+  };
+
+  const syncTechCardToServer = async (vals, vals2, selIds) => {
+    try {
+      const techCardPayload = buildTechCardPayload(
+        objectType,
+        DEFAULT_METHODOLOGY,
+        blocks,
+        vals,
+        selIds,
+        vals2,
+      );
+
+      const result = await updateTechCard(techCardPayload);
+      if (result.blocks && result.blocks.length > 0) {
+        applyLoadedTechCard(result);
+      }
+    } catch (error) {
+      console.error('Ошибка при обновлении параметра:', error);
+    }
   };
 
   const handleParamChange = async (compositeKey, value, selectedOptionId = null) => {
@@ -981,29 +1191,49 @@ const TechCardForm = () => {
       delete updatedSelectedOptionIds[compositeKey];
     }
 
+    paramValuesRef.current = updatedValues;
+    selectedOptionIdsRef.current = updatedSelectedOptionIds;
     setParamValues(updatedValues);
     setSelectedOptionIds(updatedSelectedOptionIds);
 
-    if (!shouldSyncParamSelection(compositeKey, selectedOptionId)) {
+    const hasExplicitSelection = selectedOptionId !== null
+      && selectedOptionId !== undefined
+      && selectedOptionId !== '';
+
+    clearParamSyncTimer();
+
+    if (hasExplicitSelection) {
+      await syncTechCardToServer(updatedValues, paramValues2Ref.current, updatedSelectedOptionIds);
       return;
     }
 
-    try {
-      const techCardPayload = buildTechCardPayload(
-        objectType,
-        selectedMethodology,
-        blocks,
-        updatedValues,
-        updatedSelectedOptionIds,
+    paramSyncTimerRef.current = setTimeout(() => {
+      paramSyncTimerRef.current = null;
+      void syncTechCardToServer(
+        paramValuesRef.current,
+        paramValues2Ref.current,
+        selectedOptionIdsRef.current,
       );
+    }, 400);
+  };
 
-      const result = await updateTechCard(techCardPayload);
-      if (result.blocks && result.blocks.length > 0) {
-        applyLoadedTechCard(result);
-      }
-    } catch (error) {
-      console.error('Ошибка при обновлении параметра:', error);
-    }
+  const handleParamValue2Change = (compositeKey, value2) => {
+    const updatedValues2 = {
+      ...paramValues2,
+      [compositeKey]: value2,
+    };
+    paramValues2Ref.current = updatedValues2;
+    setParamValues2(updatedValues2);
+
+    clearParamSyncTimer();
+    paramSyncTimerRef.current = setTimeout(() => {
+      paramSyncTimerRef.current = null;
+      void syncTechCardToServer(
+        paramValuesRef.current,
+        paramValues2Ref.current,
+        selectedOptionIdsRef.current,
+      );
+    }, 400);
   };
 
   const handleCreateParamOption = async (blockId, param) => {
@@ -1019,14 +1249,15 @@ const TechCardForm = () => {
     try {
       const techCardPayload = buildTechCardPayload(
         objectType,
-        selectedMethodology,
+        DEFAULT_METHODOLOGY,
         blocks,
         paramValues,
         selectedOptionIds,
+        paramValues2,
       );
 
       const result = await api.createParamOption({
-        methodology: Number.parseInt(selectedMethodology, 10) || 0,
+        methodology: DEFAULT_METHODOLOGY,
         blockId,
         paramId: param.id,
         value: currentValue,
@@ -1165,10 +1396,11 @@ const TechCardForm = () => {
     try {
       const techCardPayload = buildTechCardPayload(
         objectType,
-        selectedMethodology,
+        DEFAULT_METHODOLOGY,
         blocks,
         paramValues,
         selectedOptionIds,
+        paramValues2,
       );
 
       const result = await updateTechCard(techCardPayload);
@@ -1195,11 +1427,12 @@ const TechCardForm = () => {
     try {
       await exportTechCardToWord({
         title: 'Технологическая карта',
-        methodologyName: activeMethodology.label,
+        methodologyName: '',
         objectName: '',
         elementName: '',
         blocks,
         paramValues,
+        paramValues2,
         customFields,
         uploadedImages,
       });
@@ -1230,6 +1463,13 @@ const TechCardForm = () => {
         if (!validation.isValid) {
           allParamsValid = false;
         }
+        if (param.hasVal2) {
+          const v2 = paramValues2[compositeKey] || '';
+          const validation2 = validateByType(v2, getParamTypeData(param));
+          if (!validation2.isValid) {
+            allParamsValid = false;
+          }
+        }
       });
     });
 
@@ -1248,38 +1488,11 @@ const TechCardForm = () => {
       </h2>
 
       <div className="space-y-6">
-        <div className="bg-[#0C1515]/50 rounded-xl p-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.16em] text-[#646C89]">Методология</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {METHODOLOGY_OPTIONS.map((methodology) => {
-                const isActiveMethodology = methodology.id === selectedMethodology;
-
-                return (
-                  <button
-                    key={methodology.id}
-                    type="button"
-                    onClick={() => handleMethodologySelect(methodology.id)}
-                    disabled={loadingBlocks}
-                    className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
-                      isActiveMethodology
-                        ? 'border-[#D97B54]/50 bg-[#D97B54]/15 text-white'
-                        : 'border-[#646C89]/30 bg-transparent text-[#C9CDD8] hover:border-[#D97B54]/30 hover:text-white'
-                    }`}
-                  >
-                    {methodology.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
         {loadingBlocks && !hasBlocks && (
           <div className="bg-[#0C1515]/50 rounded-xl p-5">
             <div className="flex items-center justify-center py-8">
               <Loader2 size={32} className="animate-spin text-[#D97B54]" />
-              <span className="ml-3 text-[#646C89]">Загрузка техкарты...</span>
+              <span className="ml-3 text-[#646C89]">Загрузка шаблона...</span>
             </div>
           </div>
         )}
@@ -1443,7 +1656,7 @@ const TechCardForm = () => {
                                       key={compositeKey}
                                       compositeKey={compositeKey}
                                       param={param}
-                                      value={getReadOnlyParamValue(param, compositeKey, paramValues)}
+                                      value={getReadOnlyParamDisplay(param, compositeKey, paramValues, paramValues2)}
                                     />
                                   );
                                 }
@@ -1454,7 +1667,12 @@ const TechCardForm = () => {
                                     paramKey={compositeKey}
                                     paramName={param.name}
                                     value={paramValues[compositeKey] || ''}
+                                    value2={param.hasVal2 ? (paramValues2[compositeKey] ?? '') : ''}
+                                    hasVal2={Boolean(param.hasVal2)}
                                     onChange={(nextValue, selectedId) => handleParamChange(compositeKey, nextValue, selectedId)}
+                                    onChange2={param.hasVal2
+                                      ? (next) => handleParamValue2Change(compositeKey, next)
+                                      : undefined}
                                     onCreateOption={() => handleCreateParamOption(block.id, param)}
                                     standardValues={getStandardValuesForParam(param, block.id)}
                                     typeData={getParamTypeData(param)}

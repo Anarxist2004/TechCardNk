@@ -18,10 +18,10 @@ const resolveImageSrc = (imageSrc) => {
   const normalizedSrc = String(imageSrc).trim();
 
   if (
-    normalizedSrc.startsWith('data:') ||
-    normalizedSrc.startsWith('http://') ||
-    normalizedSrc.startsWith('https://') ||
-    normalizedSrc.startsWith('blob:')
+    normalizedSrc.startsWith('data:')
+    || normalizedSrc.startsWith('http://')
+    || normalizedSrc.startsWith('https://')
+    || normalizedSrc.startsWith('blob:')
   ) {
     return normalizedSrc;
   }
@@ -116,6 +116,38 @@ const getParamTextValue = (param, compositeKey, paramValues) => {
   return normalizeValueText(param.value);
 };
 
+const getParamText2Value = (param, compositeKey, paramValues2 = {}) => {
+  if (Object.prototype.hasOwnProperty.call(paramValues2, compositeKey)) {
+    const rawValue = paramValues2[compositeKey];
+    return rawValue !== undefined && rawValue !== null ? String(rawValue).trim() : '';
+  }
+
+  if (Array.isArray(param.value2)) {
+    return '';
+  }
+
+  if (isNamedValueObject(param.value2)) {
+    return normalizeValueText(param.value2);
+  }
+
+  return normalizeValueText(param.value2);
+};
+
+const getParamExportCellText = (param, compositeKey, paramValues, paramValues2 = {}) => {
+  const primary = getParamTextValue(param, compositeKey, paramValues);
+  if (!param.hasVal2) {
+    return primary;
+  }
+  const secondary = getParamText2Value(param, compositeKey, paramValues2);
+  if (!secondary) {
+    return primary;
+  }
+  if (!primary) {
+    return secondary;
+  }
+  return `${primary} – ${secondary}`;
+};
+
 const getParamImageSrc = (param) => {
   if (param.image) {
     return resolveImageSrc(param.image);
@@ -129,6 +161,46 @@ const getParamImageSrc = (param) => {
 };
 
 const isOperationsRowParam = (param) => param?.displayMode === DISPLAY_MODE_OPERATIONS_ROW;
+
+/**
+ * Строка операции в техкарте:
+ * — displayMode operations_row;
+ * — объект value с полями content + equipment;
+ * — пара val/val2 с бэка → на фронте hasVal2 + value + value2 (иначе number_only даёт пустые «Пункт»/«Наименование»).
+ */
+const isOperationsLikeParam = (param) => {
+  if (param?.displayMode === DISPLAY_MODE_OPERATIONS_ROW) {
+    return true;
+  }
+  if (param?.hasVal2) {
+    return true;
+  }
+  const v = param?.value;
+  if (!v || typeof v !== 'object' || Array.isArray(v)) {
+    return false;
+  }
+  return Object.prototype.hasOwnProperty.call(v, 'content')
+    && Object.prototype.hasOwnProperty.call(v, 'equipment');
+};
+
+const isSectionHeaderParam = (param) => param?.displayMode === DISPLAY_MODE_SECTION_HEADER;
+
+const paramHasImage = (param, compositeKey, imageSrcMap) => Boolean(
+  imageSrcMap[compositeKey]
+  || getParamImageSrc(param),
+);
+
+const normalizeBlockId = (block) => String(block?.id ?? '');
+
+/** Экспорт блока «Перечень операций РК» — три колонки по ГОСТ (как на макете). */
+const isOperationsRcBlock = (block) => {
+  const id = normalizeBlockId(block);
+  if (id === '4') {
+    return true;
+  }
+  const n = String(block?.name ?? '').toUpperCase().replace(/\s+/g, ' ').trim();
+  return n.includes('ПЕРЕЧЕНЬ') && n.includes('ОПЕРАЦ') && n.includes('РК');
+};
 
 const readBlobAsDataUrl = (blob) => new Promise((resolve, reject) => {
   const reader = new FileReader();
@@ -194,7 +266,7 @@ const prepareExportImages = async (blocks, uploadedImages) => {
         .map(async (image) => ({
           ...image,
           exportSrc: await embedImageSource(image.preview, cache),
-        }))
+        })),
     );
   }
 
@@ -204,13 +276,283 @@ const prepareExportImages = async (blocks, uploadedImages) => {
   };
 };
 
-const buildParamRowHtml = (blockId, param, paramValues, imageSrcMap) => {
+/** Шапка: заголовок слева, шифр/ТК/уровень справа, затем строки параметров */
+const buildOfficialBlock1Html = (block, paramValues, imageSrcMap, paramValues2 = {}) => {
+  const params = (block.params || []).filter((p) => !isOperationsRowParam(p));
+  const textParams = params.filter((p) => !paramHasImage(p, `${block.id}.${p.id}`, imageSrcMap));
+
+  const findVal = (predicate) => {
+    const found = textParams.find((p) => predicate(p.name || ''));
+    if (!found) {
+      return '';
+    }
+    const key = `${block.id}.${found.id}`;
+    return getParamExportCellText(found, key, paramValues, paramValues2);
+  };
+
+  const tkLine = findVal((name) => /шифр|тк[-\s]|код\s*тк/i.test(name))
+    || findVal((name) => /^тк\b/i.test(name));
+  const qualityVal = findVal((name) => /уровень\s+качеств/i.test(name)) || 'А';
+
+  const usedForMeta = new Set();
+  textParams.forEach((p) => {
+    const n = p.name || '';
+    if (/шифр|тк[-\s]|код\s*тк|^тк\b|уровень\s+качеств/i.test(n)) {
+      usedForMeta.add(p.id);
+    }
+  });
+
+  const rowParams = textParams.filter((p) => !usedForMeta.has(p.id));
+  const title = escapeHtml(block.name || 'Технологическая карта');
+
+  const dataRows = rowParams.map((p) => {
+    const key = `${block.id}.${p.id}`;
+    const val = getParamExportCellText(p, key, paramValues, paramValues2);
+    return `
+      <tr>
+        <td class="off-b1-label">${escapeHtml(p.name || '')}</td>
+        <td class="off-b1-value" colspan="2">${escapeHtml(val || '')}</td>
+      </tr>`;
+  }).join('');
+
+  return `
+    <table class="official-table official-b1" width="100%" border="1">
+      <tr>
+        <td class="off-b1-title" rowspan="3" width="70%">${title}</td>
+        <td class="off-b1-meta-head" colspan="2" align="center" width="30%">ШИФР</td>
+      </tr>
+      <tr>
+        <td class="off-b1-meta-val" colspan="2" align="center">${escapeHtml(tkLine || '')}</td>
+      </tr>
+      <tr>
+        <td class="off-b1-meta-label" width="15%">УРОВЕНЬ КАЧЕСТВА</td>
+        <td class="off-b1-meta-q" width="15%" align="center">${escapeHtml(qualityVal)}</td>
+      </tr>
+      ${dataRows}
+    </table>`;
+};
+
+/**
+ * Блок «Объект контроля»: слева подпись с rowspan, строки параметров, опционально вложенные подзаголовки;
+ * справа объединённая ячейка со схемой шва.
+ */
+const buildOfficialBlock2Html = (block, paramValues, imageSrcMap, paramValues2 = {}) => {
+  const params = (block.params || []).filter((p) => !isOperationsRowParam(p));
+  const imageParams = params.filter((p) => paramHasImage(p, `${block.id}.${p.id}`, imageSrcMap));
+  const diagramSrc = imageParams.length > 0
+    ? (imageSrcMap[`${block.id}.${imageParams[0].id}`] || '')
+    : '';
+
+  const leftRows = [];
+  for (const p of params) {
+    if (paramHasImage(p, `${block.id}.${p.id}`, imageSrcMap)) {
+      continue;
+    }
+    if (isSectionHeaderParam(p)) {
+      leftRows.push({ kind: 'section', title: p.name || '' });
+    } else {
+      leftRows.push({ kind: 'kv', param: p });
+    }
+  }
+
+  const sideLabel = `${escapeHtml(String(block.id))}. ${escapeHtml((block.name || 'ОБЪЕКТ КОНТРОЛЯ').toUpperCase())}`;
+  const rowspanMain = Math.max(1, leftRows.length);
+
+  if (leftRows.length === 0 && !diagramSrc) {
+    return `
+      <table class="official-table" width="100%" border="1">
+        <tr><td class="off-empty">Нет данных для экспорта в этом разделе.</td></tr>
+      </table>`;
+  }
+
+  if (leftRows.length === 0 && diagramSrc) {
+    return `
+      <table class="official-table official-b2" width="100%" border="1">
+        <tr>
+          <td class="off-b2-side">${sideLabel}</td>
+          <td class="off-b2-diagram" colspan="2" align="center">
+            <div class="off-diagram-wrap"><img src="${diagramSrc}" alt="" /></div>
+          </td>
+        </tr>
+      </table>`;
+  }
+
+  const diagramCell = diagramSrc
+    ? `<td class="off-b2-diagram" rowspan="${rowspanMain}" align="center" valign="top">
+        <div class="off-diagram-wrap"><img src="${diagramSrc}" alt="" /></div>
+      </td>`
+    : '';
+
+  const body = leftRows.map((row, index) => {
+    const isFirst = index === 0;
+    const sideCell = isFirst
+      ? `<td class="off-b2-side" rowspan="${rowspanMain}">${sideLabel}</td>`
+      : '';
+
+    if (row.kind === 'section') {
+      return `
+        <tr>
+          ${sideCell}
+          <td class="off-b2-section" colspan="2">${escapeHtml(row.title)}</td>
+          ${isFirst ? diagramCell : ''}
+        </tr>`;
+    }
+
+    const p = row.param;
+    const key = `${block.id}.${p.id}`;
+    const val = getParamExportCellText(p, key, paramValues, paramValues2);
+    return `
+      <tr>
+        ${sideCell}
+        <td class="off-b2-name">${escapeHtml(p.name || '')}</td>
+        <td class="off-b2-val" align="center">${escapeHtml(val || '')}</td>
+        ${isFirst ? diagramCell : ''}
+      </tr>`;
+  }).join('');
+
+  return `
+    <table class="official-table official-b2" width="100%" border="1">
+      ${body}
+    </table>`;
+};
+
+const BLOCK3_FOOTNOTE = (
+  '* Допускается использовать усиливающие экраны, поставляемые в одной упаковке с пленкой.'
+);
+
+const buildOfficialBlock3Html = (block, paramValues, imageSrcMap, paramValues2 = {}) => {
+  const params = (block.params || []).filter((p) => !isOperationsRowParam(p));
+  const imageParams = params.filter((p) => paramHasImage(p, `${block.id}.${p.id}`, imageSrcMap));
+  const textParams = params.filter((p) => !paramHasImage(p, `${block.id}.${p.id}`, imageSrcMap));
+
+  const diagramParts = imageParams.map((p) => {
+    const src = imageSrcMap[`${block.id}.${p.id}`] || '';
+    if (!src) {
+      return '';
+    }
+    const caption = escapeHtml(p.name || 'СХЕМА ПРОСВЕЧИВАНИЯ');
+    return `
+      <div class="off-b3-scheme-title">${caption}</div>
+      <div class="off-diagram-wrap off-b3-img"><img src="${src}" alt="${caption}" /></div>`;
+  }).join('');
+
+  const diagramBody = diagramParts
+    || '<div class="off-b3-scheme-title">СХЕМА ПРОСВЕЧИВАНИЯ</div>';
+
+  const legend = `
+    <div class="off-b3-legend">
+      <div>И – источник ионизирующего излучения;</div>
+      <div>П – кассета с пленкой</div>
+    </div>`;
+
+  const diagramCell = `
+    <td class="off-b3-diagram" rowspan="__ROWSPAN__" align="center" valign="top">
+      ${diagramBody}
+      ${legend}
+    </td>`;
+
+  const nDataRows = Math.max(textParams.length, 1);
+  const diagramRowspan = 1 + nDataRows;
+
+  const titleRow = `
+    <tr>
+      <td colspan="3" class="off-b3-banner" align="center">
+        <b>${escapeHtml(String(block.id))}. ${escapeHtml((block.name || '').toUpperCase())}</b>
+      </td>
+    </tr>`;
+
+  const subHeadRow = `
+    <tr>
+      <td colspan="2" class="off-b3-subhead" align="center"><b>ПАРАМЕТРЫ КОНТРОЛЯ</b></td>
+      ${diagramCell.replace('__ROWSPAN__', String(diagramRowspan))}
+    </tr>`;
+
+  const dataRows = textParams.length > 0
+    ? textParams.map((p) => {
+      const key = `${block.id}.${p.id}`;
+      const val = getParamExportCellText(p, key, paramValues, paramValues2);
+      return `
+        <tr>
+          <td class="off-b3-pname">${escapeHtml(p.name || '')}</td>
+          <td class="off-b3-pval" align="center">${escapeHtml(val || '')}</td>
+        </tr>`;
+    }).join('')
+    : `
+      <tr>
+        <td class="off-b3-pname">&#160;</td>
+        <td class="off-b3-pval" align="center">&#160;</td>
+      </tr>`;
+
+  const footnoteRow = `
+    <tr>
+      <td colspan="3" class="off-b3-footnote">${escapeHtml(BLOCK3_FOOTNOTE)}</td>
+    </tr>`;
+
+  return `
+    <table class="official-table official-b3" width="100%" border="1">
+      ${titleRow}
+      ${subHeadRow}
+      ${dataRows}
+      ${footnoteRow}
+    </table>`;
+};
+
+const buildParamRowHtml = (blockId, param, paramValues, imageSrcMap, paramValues2 = {}, options = {}) => {
+  const { operationsGost = false } = options;
   const compositeKey = `${blockId}.${param.id}`;
   const paramNumber = `${blockId}.${param.id}`;
   const imageSrc = imageSrcMap[compositeKey] || '';
 
-  if (param.displayMode === DISPLAY_MODE_OPERATIONS_ROW) {
-    return '';
+  if (isOperationsLikeParam(param)) {
+    const value = getOperationsValueObject(param);
+    const rawContent = typeof value.content === 'string'
+      ? value.content
+      : normalizeValueText(value.content);
+    const rawEquipment = typeof value.equipment === 'string'
+      ? value.equipment.trim()
+      : normalizeValueText(value.equipment);
+
+    const contentProcessed = applyOperationPlaceholders(
+      rawContent,
+      param,
+      compositeKey,
+      paramValues,
+      paramValues2,
+    );
+    const equipmentProcessed = applyOperationPlaceholders(
+      rawEquipment,
+      param,
+      compositeKey,
+      paramValues,
+      paramValues2,
+    );
+    const fullContent = resolveOperationFullContent(value, contentProcessed);
+    const nameHtml = buildOperationsNameCellHtml(param, { id: blockId });
+
+    if (operationsGost) {
+      return `
+      <tr class="ops-gost-row">
+        <td class="ops-gost-name"><b>${nameHtml}</b></td>
+        <td class="ops-gost-content">${formatOpsCellHtml(fullContent)}</td>
+        <td class="ops-gost-equipment">${formatOpsCellHtml(equipmentProcessed)}</td>
+      </tr>`;
+    }
+
+    const punctHtml = escapeHtml(paramNumber);
+    let valueHtml = formatOpsCellHtml(fullContent);
+    const eqTrim = equipmentProcessed.trim();
+    if (valueHtml === '–' && eqTrim) {
+      valueHtml = formatOpsCellHtml(equipmentProcessed);
+    } else if (eqTrim && eqTrim !== '–') {
+      valueHtml = `${valueHtml}<br/><br/><b>Оборудование и инструмент:</b><br/>${formatOpsCellHtml(equipmentProcessed)}`;
+    }
+
+    return `
+      <tr class="param-operation-row">
+        <td class="cell-number"><b>${punctHtml}</b></td>
+        <td class="cell-name"><b>${nameHtml}</b></td>
+        <td class="cell-value">${valueHtml}</td>
+      </tr>`;
   }
 
   if (param.displayMode === DISPLAY_MODE_SECTION_HEADER) {
@@ -237,6 +579,18 @@ const buildParamRowHtml = (blockId, param, paramValues, imageSrcMap) => {
       `;
     }
 
+    if (operationsGost) {
+      return `
+      <tr class="image-row">
+        <td colspan="3">
+          <div class="image-wrapper">
+            <div class="image-caption">${caption}</div>
+            <img src="${imageSrc}" alt="${caption}" />
+          </div>
+        </td>
+      </tr>`;
+    }
+
     return `
       <tr class="image-row">
         <td class="cell-number">${escapeHtml(paramNumber)}</td>
@@ -250,9 +604,26 @@ const buildParamRowHtml = (blockId, param, paramValues, imageSrcMap) => {
     `;
   }
 
-  const textValue = getParamTextValue(param, compositeKey, paramValues);
+  const textValue = getParamExportCellText(param, compositeKey, paramValues, paramValues2);
   if (!textValue) {
     return '';
+  }
+
+  if (operationsGost) {
+    if (param.displayMode === DISPLAY_MODE_NUMBER_ONLY) {
+      return `
+      <tr class="row-number-only">
+        <td class="ops-gost-name">${escapeHtml(paramNumber)}</td>
+        <td class="ops-gost-content">${escapeHtml(textValue)}</td>
+        <td class="ops-gost-equipment">–</td>
+      </tr>`;
+    }
+    return `
+    <tr>
+      <td class="ops-gost-name">${escapeHtml(param.name || paramNumber)}</td>
+      <td class="ops-gost-content">${escapeHtml(textValue)}</td>
+      <td class="ops-gost-equipment">–</td>
+    </tr>`;
   }
 
   if (param.displayMode === DISPLAY_MODE_NUMBER_ONLY) {
@@ -273,7 +644,97 @@ const buildParamRowHtml = (blockId, param, paramValues, imageSrcMap) => {
   `;
 };
 
-const buildCustomRowsHtml = (fields = []) => {
+const getOperationsValueObject = (param) => {
+  const v = param?.value;
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    return v;
+  }
+  if (param?.hasVal2) {
+    const contentStr = v != null && typeof v !== 'object'
+      ? String(v)
+      : normalizeValueText(v);
+    const eq = param.value2 != null ? String(param.value2).trim() : '';
+    const primary = v != null && typeof v !== 'object' ? String(v) : String(v ?? '');
+    return {
+      content: contentStr,
+      equipment: eq,
+      val: primary,
+      val2: param.value2 != null ? String(param.value2) : '',
+    };
+  }
+  return {};
+};
+
+/**
+ * Полный текст колонки «Содержание»: одна ячейка (подпункты 3.1.1, 3.1.2 … через переносы).
+ * При наличии value.steps — склеиваем в один блок.
+ */
+const resolveOperationFullContent = (value, contentAfterPlaceholders) => {
+  if (Array.isArray(value.steps) && value.steps.length > 0) {
+    const mapped = value.steps.map((item) => {
+      if (typeof item === 'string') {
+        return item;
+      }
+      if (item && typeof item === 'object') {
+        return String(item.content ?? item.text ?? '');
+      }
+      return '';
+    }).filter((s) => String(s).trim() !== '');
+    if (mapped.length > 0) {
+      return mapped.join('\n');
+    }
+  }
+  return String(contentAfterPlaceholders ?? '').replace(/\r\n/g, '\n').trim();
+};
+
+/** Номер операции (3.1) и наименование — в одной ячейке первой колонки; подпункты 3.1.1 только в «Содержании». */
+const buildOperationsNameCellHtml = (param, block) => {
+  const name = (param.name || '').trim();
+  const autoPrefix = `${block.id}.${param.id}`;
+  if (!name) {
+    return escapeHtml(autoPrefix);
+  }
+  if (/^\s*\d+(?:\.\d+)+\s/.test(name)) {
+    return escapeHtml(name);
+  }
+  return escapeHtml(`${autoPrefix} ${name}`.trim());
+};
+
+const applyOperationPlaceholders = (text, param, compositeKey, paramValues, paramValues2 = {}) => {
+  let s = String(text ?? '');
+  let v1 = '';
+  let v2 = '';
+  if (isOperationsLikeParam(param)) {
+    const ov = getOperationsValueObject(param);
+    if (Object.prototype.hasOwnProperty.call(paramValues, compositeKey)) {
+      v1 = String(paramValues[compositeKey] ?? '').trim();
+    } else if (ov.val !== undefined && ov.val !== null) {
+      v1 = String(ov.val).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(paramValues2, compositeKey)) {
+      v2 = String(paramValues2[compositeKey] ?? '').trim();
+    } else if (ov.val2 !== undefined && ov.val2 !== null) {
+      v2 = String(ov.val2).trim();
+    }
+  } else {
+    v1 = getParamTextValue(param, compositeKey, paramValues);
+    v2 = getParamText2Value(param, compositeKey, paramValues2);
+  }
+  s = s.replace(/\{\{val2\}\}/g, v2).replace(/\{\{val\}\}/g, v1);
+  s = s.replace(/\{val2\}/g, v2).replace(/\{val\}/g, v1);
+  return s;
+};
+
+const formatOpsCellHtml = (text) => {
+  const s = String(text ?? '').trim();
+  if (!s) {
+    return '–';
+  }
+  return escapeHtml(s).replace(/\n/g, '<br/>');
+};
+
+const buildCustomRowsHtml = (fields = [], options = {}) => {
+  const { operationsGost = false } = options;
   const normalizedFields = Array.isArray(fields)
     ? fields.filter((field) => field && ((field.name || '').trim() || (field.value || '').trim()))
     : [];
@@ -282,61 +743,26 @@ const buildCustomRowsHtml = (fields = []) => {
     return '';
   }
 
-  const rows = normalizedFields.map((field) => `
+  const rows = normalizedFields.map((field) => (operationsGost
+    ? `
+    <tr class="custom-row">
+      <td class="ops-gost-name">${escapeHtml(field.name || 'Дополнительное поле')}</td>
+      <td class="ops-gost-content">${escapeHtml(field.value || '')}</td>
+      <td class="ops-gost-equipment">&#160;</td>
+    </tr>`
+    : `
     <tr class="custom-row">
       <td class="cell-number"></td>
       <td class="cell-name">${escapeHtml(field.name || 'Дополнительное поле')}</td>
       <td class="cell-value">${escapeHtml(field.value || '')}</td>
     </tr>
-  `).join('');
+  `)).join('');
 
   return `
     <tr class="section-row">
       <td colspan="3">Дополнительные поля</td>
     </tr>
     ${rows}
-  `;
-};
-
-const buildOperationsTableHtml = (params = []) => {
-  const operationRows = Array.isArray(params)
-    ? params.filter(isOperationsRowParam)
-    : [];
-
-  if (operationRows.length === 0) {
-    return '';
-  }
-
-  const rowsHtml = operationRows.map((param) => {
-    const value = (param?.value && typeof param.value === 'object' && !Array.isArray(param.value))
-      ? param.value
-      : {};
-
-    const content = normalizeValueText(value.content) || '-';
-    const equipment = normalizeValueText(value.equipment) || '-';
-
-    return `
-      <tr>
-        <td class="cell-name">${escapeHtml(param.name || '')}</td>
-        <td class="cell-value">${escapeHtml(content)}</td>
-        <td class="cell-value">${escapeHtml(equipment)}</td>
-      </tr>
-    `;
-  }).join('');
-
-  return `
-    <table class="block-table operations-table">
-      <thead>
-        <tr>
-          <th class="operations-col-name">Наименование операции</th>
-          <th class="operations-col-content">Содержание операции, основные требования</th>
-          <th class="operations-col-equipment">Оборудование и инструмент</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rowsHtml}
-      </tbody>
-    </table>
   `;
 };
 
@@ -366,18 +792,34 @@ const buildUploadedImagesHtml = (images = []) => {
   `;
 };
 
-const buildBlockHtml = (block, paramValues, customFields, uploadedImages, imageSrcMap) => {
-  const regularParams = (block.params || []).filter((param) => !isOperationsRowParam(param));
-  const paramRows = regularParams
-    .map((param) => buildParamRowHtml(block.id, param, paramValues, imageSrcMap))
+const buildGenericBlockHtml = (block, paramValues, customFields, uploadedImages, imageSrcMap, paramValues2 = {}) => {
+  const operationsGost = isOperationsRcBlock(block);
+  const rowOptions = { operationsGost };
+  const paramRows = (block.params || [])
+    .map((param) => buildParamRowHtml(block.id, param, paramValues, imageSrcMap, paramValues2, rowOptions))
     .filter(Boolean)
     .join('');
-  const operationsTableHtml = buildOperationsTableHtml(block.params);
-  const customRows = buildCustomRowsHtml(customFields[block.id] || []);
+  const customRows = buildCustomRowsHtml(customFields[block.id] || [], rowOptions);
   const imagesSection = buildUploadedImagesHtml(uploadedImages[block.id] || []);
 
   const tableHtml = (paramRows || customRows)
-    ? `
+    ? (operationsGost
+      ? `
+      <table class="block-table block-table-ops-gost" width="100%" border="1">
+        <thead>
+          <tr>
+            <th class="ops-gost-name">Наименование<br/>операции</th>
+            <th class="ops-gost-content">Содержание операции, основные требования</th>
+            <th class="ops-gost-equipment">Оборудование и инструмент</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${paramRows}
+          ${customRows}
+        </tbody>
+      </table>
+    `
+      : `
       <table class="block-table">
         <thead>
           <tr>
@@ -391,17 +833,16 @@ const buildBlockHtml = (block, paramValues, customFields, uploadedImages, imageS
           ${customRows}
         </tbody>
       </table>
-    `
+    `)
     : '';
 
-  const hasAnyContent = Boolean(tableHtml || operationsTableHtml || imagesSection);
+  const hasAnyContent = Boolean(tableHtml || imagesSection);
 
   return `
     <section class="techcard-block">
       <h2 class="block-title">${escapeHtml(`${block.id}. ${block.name}`)}</h2>
       ${hasAnyContent ? `
         ${tableHtml}
-        ${operationsTableHtml}
         ${imagesSection}
       ` : `
         <div class="empty-block">Нет заполненных данных.</div>
@@ -410,12 +851,27 @@ const buildBlockHtml = (block, paramValues, customFields, uploadedImages, imageS
   `;
 };
 
+const buildBlockExportSection = (block, paramValues, customFields, uploadedImages, imageSrcMap, paramValues2 = {}) => {
+  const id = normalizeBlockId(block);
+  if (id === '1') {
+    return `<section class="techcard-block techcard-official">${buildOfficialBlock1Html(block, paramValues, imageSrcMap, paramValues2)}</section>`;
+  }
+  if (id === '2') {
+    return `<section class="techcard-block techcard-official">${buildOfficialBlock2Html(block, paramValues, imageSrcMap, paramValues2)}</section>`;
+  }
+  if (id === '3') {
+    return `<section class="techcard-block techcard-official">${buildOfficialBlock3Html(block, paramValues, imageSrcMap, paramValues2)}</section>`;
+  }
+  return buildGenericBlockHtml(block, paramValues, customFields, uploadedImages, imageSrcMap, paramValues2);
+};
+
 const buildWordHtml = ({
   methodologyName,
   objectName,
   elementName,
   blocks,
   paramValues,
+  paramValues2 = {},
   customFields,
   uploadedImages,
   imageSrcMap,
@@ -429,7 +885,7 @@ const buildWordHtml = ({
   ].filter(Boolean).join('');
 
   const blocksHtml = blocks
-    .map((block) => buildBlockHtml(block, paramValues, customFields, uploadedImages, imageSrcMap))
+    .map((block) => buildBlockExportSection(block, paramValues, customFields, uploadedImages, imageSrcMap, paramValues2))
     .join('');
   const documentTitle = escapeHtml(title || 'Технологическая карта');
 
@@ -448,190 +904,175 @@ const buildWordHtml = ({
       </xml>
       <![endif]-->
       <style>
-        * {
-          box-sizing: border-box;
-        }
-
+        * { box-sizing: border-box; }
         html, body {
           margin: 0;
           padding: 0;
           background: #ffffff;
-          color: #202020;
-          font-family: "Times New Roman", Georgia, serif;
-          font-size: 12pt;
-          line-height: 1.35;
-        }
-
-        body {
-          padding: 10mm 0;
-        }
-
-        .page {
-          width: 182mm;
-          margin: 0 auto;
-        }
-
-        .document-title {
-          margin: 0 0 6mm;
-          font-size: 18pt;
-          line-height: 1.2;
-        }
-
-        .document-meta {
-          display: grid;
-          gap: 2mm;
-          margin-bottom: 7mm;
-          padding-bottom: 4mm;
-          border-bottom: 1px solid #7b7b7b;
-          font-size: 10.5pt;
-        }
-
-        .document-meta span {
-          font-weight: 700;
-        }
-
-        .techcard-block {
-          margin-bottom: 8mm;
-          page-break-inside: avoid;
-        }
-
-        .block-title {
-          margin: 0 0 3mm;
-          font-size: 13.5pt;
+          color: #000000;
+          font-family: "Times New Roman", Times, serif;
+          font-size: 11pt;
           line-height: 1.25;
         }
-
+        body { padding: 8mm 10mm; }
+        .page { width: 100%; max-width: 190mm; margin: 0 auto; }
+        .document-title {
+          margin: 0 0 4mm;
+          font-size: 14pt;
+          text-align: center;
+        }
+        .document-meta {
+          margin-bottom: 5mm;
+          padding-bottom: 3mm;
+          border-bottom: 1px solid #000000;
+          font-size: 10pt;
+        }
+        .document-meta span { font-weight: 700; }
+        .techcard-block { margin-bottom: 6mm; page-break-inside: avoid; }
+        .block-title {
+          margin: 0 0 2mm;
+          font-size: 12pt;
+        }
+        .official-table {
+          width: 100%;
+          border-collapse: collapse;
+          table-layout: fixed;
+          mso-table-layout-alt: fixed;
+        }
+        .official-table td, .official-table th {
+          border: 1px solid #000000;
+          padding: 3pt 4pt;
+          vertical-align: middle;
+        }
+        .off-b1-title {
+          font-weight: bold;
+          font-size: 11pt;
+          text-align: center;
+          vertical-align: middle;
+          line-height: 1.2;
+        }
+        .off-b1-label { font-weight: 600; width: 38%; vertical-align: top; }
+        .off-b1-value { vertical-align: top; }
+        .off-b1-meta-head, .off-b1-meta-val, .off-b1-meta-label, .off-b1-meta-q {
+          font-size: 10pt;
+        }
+        .off-b2-side {
+          font-weight: bold;
+          text-align: center;
+          vertical-align: middle;
+          width: 12%;
+          font-size: 9pt;
+          line-height: 1.15;
+        }
+        .off-b2-name { width: 44%; vertical-align: top; }
+        .off-b2-val { width: 18%; vertical-align: top; }
+        .off-b2-diagram { width: 26%; vertical-align: top; padding: 4pt; }
+        .off-b2-section {
+          font-weight: bold;
+          text-align: center;
+          background: #f0f0f0;
+        }
+        .off-b3-banner { font-size: 11pt; padding: 4pt; }
+        .off-b3-subhead { padding: 3pt; background: #f0f0f0; }
+        .off-b3-pname { width: 42%; vertical-align: top; }
+        .off-b3-pval { width: 23%; vertical-align: top; }
+        .off-b3-diagram { width: 35%; vertical-align: top; padding: 4pt; }
+        .off-b3-scheme-title {
+          font-weight: bold;
+          margin-bottom: 3pt;
+          text-align: center;
+        }
+        .off-b3-legend { margin-top: 4pt; font-size: 9pt; text-align: left; }
+        .off-b3-footnote { font-size: 9pt; vertical-align: top; padding: 4pt; }
+        .off-diagram-wrap { text-align: center; }
+        .off-diagram-wrap img {
+          max-width: 100%;
+          max-height: 75mm;
+          width: auto;
+          height: auto;
+        }
+        .off-b3-img img { max-height: 85mm; }
+        .off-empty { padding: 6pt; color: #444; font-style: italic; }
         .block-table {
           width: 100%;
           border-collapse: collapse;
           table-layout: fixed;
         }
-
-        .block-table th,
-        .block-table td {
-          border: 1px solid #8b8b8b;
+        .block-table th, .block-table td {
+          border: 1px solid #000000;
           padding: 3mm 3.2mm;
           vertical-align: top;
         }
-
         .block-table th {
           background: #f2f2f2;
           font-size: 10pt;
           text-align: left;
         }
-
-        .col-number {
-          width: 18%;
+        .col-number { width: 18%; }
+        .col-name { width: 30%; }
+        .col-value { width: 52%; }
+        .block-table-ops-gost thead th {
+          text-align: center;
+          vertical-align: middle;
+          font-size: 10pt;
         }
-
-        .col-name {
-          width: 30%;
-        }
-
-        .col-value {
-          width: 52%;
-        }
-
-        .operations-col-name {
-          width: 24%;
-        }
-
-        .operations-col-content {
-          width: 50%;
-        }
-
-        .operations-col-equipment {
-          width: 26%;
-        }
-
-        .cell-number {
-          font-weight: 700;
-          white-space: nowrap;
-        }
-
-        .cell-name {
-          font-weight: 600;
-        }
-
-        .cell-value,
-        .cell-value-wide {
+        .ops-gost-name { width: 24%; vertical-align: top; }
+        .ops-gost-content { width: 50%; vertical-align: top; }
+        .ops-gost-equipment { width: 26%; vertical-align: top; }
+        .cell-number { font-weight: 700; white-space: nowrap; }
+        .cell-name { font-weight: 600; }
+        .cell-value, .cell-value-wide {
           white-space: pre-wrap;
           word-break: break-word;
         }
-
         .section-row td {
           background: #f8f8f8;
           font-weight: 700;
         }
-
-        .image-row td {
-          padding: 4mm;
-        }
-
-        .image-wrapper {
-          text-align: center;
-        }
-
-        .image-caption {
-          margin-bottom: 2mm;
-          font-weight: 600;
-        }
-
+        .image-row td { padding: 4mm; }
+        .image-wrapper { text-align: center; }
+        .image-caption { margin-bottom: 2mm; font-weight: 600; }
         .image-wrapper img {
           max-width: 100%;
           max-height: 110mm;
           object-fit: contain;
         }
-
-        .image-wrapper-full img {
-          max-height: 175mm;
-        }
-
-        .extra-images-section {
-          margin-top: 4mm;
-        }
-
-        .extra-images-title {
-          margin-bottom: 2mm;
-          font-weight: 700;
-        }
-
+        .image-wrapper-full img { max-height: 175mm; }
+        .extra-images-section { margin-top: 4mm; }
+        .extra-images-title { margin-bottom: 2mm; font-weight: 700; }
         .extra-images-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 4mm;
+          display: table;
+          width: 100%;
         }
-
         .extra-image-card {
-          margin: 0;
-          border: 1px solid #8b8b8b;
+          display: inline-block;
+          width: 48%;
+          margin: 1%;
+          vertical-align: top;
+          border: 1px solid #000;
           padding: 3mm;
           page-break-inside: avoid;
         }
-
         .extra-image-card img {
           display: block;
           width: 100%;
           max-height: 60mm;
           object-fit: contain;
         }
-
         .extra-image-card figcaption {
           margin-top: 2mm;
           font-size: 10pt;
           word-break: break-word;
         }
-
         .empty-block {
           padding: 4mm;
-          border: 1px dashed #9b9b9b;
-          color: #5f5f5f;
+          border: 1px dashed #000;
+          color: #444;
           font-style: italic;
         }
-
         .export-note {
-          margin-top: 8mm;
-          color: #5f5f5f;
+          margin-top: 6mm;
+          color: #444;
           font-size: 9pt;
         }
       </style>
@@ -643,7 +1084,7 @@ const buildWordHtml = ({
           ${metadataRows}
         </section>
         ${blocksHtml}
-        <div class="export-note">Документ сформирован из текущего состояния техкарты на frontend.</div>
+        <div class="export-note">Документ сформирован из текущего состояния техкарты.</div>
       </main>
     </body>
   </html>`;
@@ -682,6 +1123,7 @@ export const exportTechCardToWord = async ({
   elementName = '',
   blocks = [],
   paramValues = {},
+  paramValues2 = {},
   customFields = {},
   uploadedImages = {},
   title = 'Технологическая карта',
@@ -694,6 +1136,7 @@ export const exportTechCardToWord = async ({
     elementName,
     blocks,
     paramValues,
+    paramValues2,
     customFields,
     uploadedImages: extraImages,
     imageSrcMap: blockImages,

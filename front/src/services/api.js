@@ -71,10 +71,13 @@ function transformBlocksResponse(data) {
           return;
         }
 
+        const hasVal2 = Object.prototype.hasOwnProperty.call(param, 'val2');
+
         const paramData = {
           id: paramId,
           name: param.name || `Параметр ${paramId}`,
           value: param.val,
+          ...(hasVal2 ? { value2: param.val2, hasVal2: true } : {}),
           options: Array.isArray(param.options) ? param.options : [],
           typeData: param.typeData || 'string',
           displayMode: param.displayMode || null,
@@ -98,15 +101,17 @@ function transformBlocksResponse(data) {
   return { type: data.type, blocks, flatParams };
 }
 
-const api = {
-  getFullTechCard: async (methodology = 0) => {
-    const data = await postRequest('elementParamValue', {
-      idElement: 0,
-      methodology: normalizeMethodology(methodology),
-    });
+async function loadTechCardTemplate(methodology = 0) {
+  const data = await postRequest('template', {
+    methodology: normalizeMethodology(methodology),
+  });
 
-    return transformBlocksResponse(data);
-  },
+  return transformBlocksResponse(data);
+}
+
+const api = {
+  getTemplate: loadTechCardTemplate,
+  getFullTechCard: loadTechCardTemplate,
 
   updateTechCard: async (techCardData) => {
     const data = await postRequest('updateTechCard', { techCard: techCardData });

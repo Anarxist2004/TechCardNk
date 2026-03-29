@@ -1,51 +1,15 @@
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar, List
 from services.Interfaces.i_servise import IServise
+from services.tech_card import TechCardData
 T = TypeVar('T')
 
 class IControllers(ABC, Generic[T]):
-    @abstractmethod
-    def handle_request(self, data: T) -> T:
-        """Обрабатывает входные данные и возвращает результат"""
-        pass    
 
     @abstractmethod
-    def setServise(self,sertv:IServise):
-        pass
-
-    @abstractmethod
-    def getObjectControl(self, methodology=0)->T:
-        pass
-
-    @abstractmethod
-    def getControlElements(self,id, methodology=0)->T:
-        pass
-
-    @abstractmethod
-    def getControlElementParam(self,id, methodology=0)->T:
-        pass
-
-    @abstractmethod
-    def getElementParamsValues(self,id, methodology=0)->T:
-        pass
-
-    @abstractmethod
-    def getControlElementParamValue(self,idCntlEl,idParam)->T:
-        pass
-
-    @abstractmethod
-    def updateTechCard(self,techCard)->T:
-        pass
-
-    @abstractmethod
-    def getMethodologies(self)->T:
-        pass
-
-    @abstractmethod
-    def createParamOption(self, payload)->T:
+    def get_template()->TechCardData:
         pass
     
-    # @abstractmethod
-    # def selectionOfControlObject(self)->T:
-
-    # def 
+    @abstractmethod
+    def updateTechCard()->TechCardData:
+        pass

@@ -10,12 +10,8 @@ class TypeObjectControl(StrEnum):
 class TechCardData:
     def __init__(
         self,
-        typeObjectControl: Optional[TypeObjectControl] = None,
-        methodology: int = 0,
         params: Optional[Dict[str, Dict[str, Any]]] = None
     ):
-        self.type = typeObjectControl
-        self.methodology = methodology
         self.params = params or {}
 
     def get(self, key: str):
@@ -23,13 +19,6 @@ class TechCardData:
 
     def set(self, key: str, value):
         self.params[key] = value
-
-
-    def getTypeObjectControl(self,)->TypeObjectControl:
-        return self.type
-
-    def getMethodology(self) -> int:
-        return self.methodology
     
     def to_dict(self) -> Dict:
         return {
@@ -37,10 +26,7 @@ class TechCardData:
     }
 
     def _to_json_dict(self) -> Dict[str, Any]:
-        type_val = self.type.value if hasattr(self.type, "value") else self.type
         return {
-            "methodology": self.methodology,
-            "type": type_val,
             "params": self.params,
         }
 
@@ -159,63 +145,7 @@ class TechCardData:
             return True
 
         return False
-    
-    # def insert_param_to_block_reWrite(
-    #     self,
-    #     block_name: str,
-    #     insert_id: Union[int, str],
-    #     param: Dict[str, Any]
-    # ) -> bool:
-    #     if "name" not in param:
-    #         raise ValueError("param должен содержать ключ 'name'")
 
-    #     # --- нормализация insert_id ---
-    #     try:
-    #         if isinstance(insert_id, str):
-    #             if "." in insert_id:
-    #                 raise ValueError
-    #             insert_id = int(insert_id)
-    #         else:
-    #             insert_id = int(insert_id)
-    #     except (ValueError, TypeError):
-    #         raise ValueError(f"insert_id должен быть целым числом, получено: {insert_id!r}")
-
-    #     for block in self.params.values():
-    #         if block.get("name") != block_name:
-    #             continue
-
-    #         params = block.setdefault("params", {})
-
-    #         # --- собираем только int-ключи ---
-    #         int_keys = [k for k in params.keys() if isinstance(k, int)]
-
-    #         # --- ищем параметр с тем же name ---
-    #         old_key = None
-    #         for k in int_keys:
-    #             if params[k].get("name") == param["name"]:
-    #                 old_key = k
-    #                 break
-
-    #         # --- если параметр уже есть — удаляем ---
-    #         if old_key is not None:
-    #             params.pop(old_key)
-    #             int_keys.remove(old_key)
-
-    #             # если удалённый был левее точки вставки — сдвигаем insert_id
-    #             if old_key < insert_id:
-    #                 insert_id -= 1
-
-    #         # --- сдвигаем хвост вправо начиная с insert_id ---
-    #         for k in sorted((k for k in int_keys if k >= insert_id), reverse=True):
-    #             params[k + 1] = params.pop(k)
-
-    #         # --- вставляем новый параметр ---
-    #         params[insert_id] = dict(param)
-
-    #         return True
-
-    #     return False
-    
     def _id_to_sort_key(self, key) -> tuple:
         """
         Преобразует id:

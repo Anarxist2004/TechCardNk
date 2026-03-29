@@ -41,32 +41,15 @@ def create_adapter(controller: IControllers,):
         element_id = safe_int(request_payload.get("idElement", 1), 1)
         element_type = safe_int(request_payload.get("type", 1), 1)
         try:
-            if control_type == "object":
-                tech_card = controller.getObjectControl(methodology)
-            elif control_type == "element":
-                tech_card = controller.getControlElements(element_type, methodology)
-            elif control_type == "elementParams":
-                tech_card = controller.getControlElementParam(element_id, methodology)
-            elif control_type == "elementParamValue":
-                tech_card = controller.getElementParamsValues(element_id, methodology)
+            if control_type == "template":
+                tech_card = controller.get_template()
             elif control_type == "updateTechCard":
                 tech_card = controller.updateTechCard(request_payload.get("techCard", {}))
-            elif control_type == "methodologies":
-                methodologies = controller.getMethodologies()
-                tech_card = {
-                    "items": [
-                        {"id": str(methodology_id), "name": methodology_name}
-                        for methodology_id, methodology_name in methodologies.items()
-                    ]
-                }
-            elif control_type == "createParamOption":
-                tech_card = controller.createParamOption(request_payload)
             else:
                 return {}
 
             print(tech_card)
-            if hasattr(tech_card, "serialise"):
-                return tech_card.serialise()
+
             return tech_card
         except Exception as e:
             print(
