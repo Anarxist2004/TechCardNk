@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Union
 
 
 class ITypeOfWeldedJointDB(ABC):
@@ -22,4 +22,11 @@ class ITypeOfWeldedJointDB(ABC):
         self, regulatory_document_name: str
     ) -> List[Dict[str, Any]]:
         """Типы соединений по имени нормативного документа."""
+        pass
+
+    @abstractmethod
+    def get_welded_joint_image_ref(
+        self, joint_name_or_id: Union[str, int]
+    ) -> Optional[str]:
+        """image_ref для типа соединения по id или по имени (без учёта регистра и краевых пробелов)."""
         pass

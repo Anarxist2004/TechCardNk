@@ -56,11 +56,6 @@ class TechCardService(IServise):
             1,
             {"name": "Тип сварного соединения", "val": None},
         )
-        card.insert_param_to_block(
-            card.get("2")["name"],
-            2,
-            {"name": "Тип сварки", "val": None},
-        )
 
         card.set("3", {"name": "ИСХОДНЫЕ ДАННЫЕ", "params": {}})
         card.insert_param_to_block(

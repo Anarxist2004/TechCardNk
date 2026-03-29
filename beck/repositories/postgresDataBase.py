@@ -2,8 +2,11 @@ from repositories.Interfaces.i_repository import IRepository
 from repositories.Interfaces.i_control_methods_db import IControlMethodsDB
 from repositories.Interfaces.i_regulatory_documents_db import IRegulatoryDocumentsDB
 from repositories.Interfaces.i_type_of_welded_joint_db import ITypeOfWeldedJointDB
+from repositories.Interfaces.i_params_by_type_welding_joint_db import (
+    IParamsByTypeWeldingJointDB,
+)
 from services.tech_card import TechCardData
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Union
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -13,6 +16,7 @@ class PostgresDataBase(
     IControlMethodsDB,
     IRegulatoryDocumentsDB,
     ITypeOfWeldedJointDB,
+    IParamsByTypeWeldingJointDB,
 ):
 
     def __init__(self, dsn: str):
@@ -150,4 +154,73 @@ class PostgresDataBase(
             return [dict(r) for r in rows]
         except psycopg2.Error as e:
             print("get_type_of_welded_joints_for_regulatory_document_name:", e)
+            return []
+
+    def get_welded_joint_image_ref(
+        self, joint_name_or_id: Union[str, int]
+    ) -> Optional[str]:
+        if not self.cursor:
+            return None
+        try:
+            if isinstance(joint_name_or_id, int):
+                self.cursor.execute(
+                    "SELECT image_ref FROM public.type_of_welded_joint WHERE id = %s",
+                    (joint_name_or_id,),
+                )
+            else:
+                key = str(joint_name_or_id).strip()
+                if not key:
+                    return None
+                if key.isdigit():
+                    self.cursor.execute(
+                        "SELECT image_ref FROM public.type_of_welded_joint WHERE id = %s",
+                        (int(key),),
+                    )
+                else:
+                    self.cursor.execute(
+                        "SELECT image_ref FROM public.type_of_welded_joint "
+                        "WHERE lower(btrim(name::text)) = lower(btrim(%s::text)) "
+                        "LIMIT 1",
+                        (key,),
+                    )
+            row = self.cursor.fetchone()
+            if not row:
+                return None
+            ref = row.get("image_ref") if isinstance(row, dict) else row["image_ref"]
+            if ref is None or (isinstance(ref, str) and not ref.strip()):
+                return None
+            return str(ref).strip()
+        except psycopg2.Error as e:
+            print("get_welded_joint_image_ref:", e)
+            return None
+
+    def get_params_by_welded_joint_type(
+        self, joint_name_or_id: Union[str, int]
+    ) -> List[Dict[str, Any]]:
+        if not self.cursor:
+            return []
+        try:
+            if isinstance(joint_name_or_id, int):
+                cond = "twj.id = %s"
+                param = (joint_name_or_id,)
+            else:
+                key = str(joint_name_or_id).strip()
+                if not key:
+                    return []
+                if key.isdigit():
+                    cond = "twj.id = %s"
+                    param = (int(key),)
+                else:
+                    cond = "lower(btrim(twj.name::text)) = lower(btrim(%s::text))"
+                    param = (key,)
+            self.cursor.execute(
+                "SELECT p.id, p.name FROM public.params_by_type_welding_joint p "
+                "INNER JOIN public.type_of_welded_joint twj ON twj.id = p.type_of_welded_joint_id "
+                f"WHERE {cond} ORDER BY p.id",
+                param,
+            )
+            rows = self.cursor.fetchall()
+            return [dict(r) for r in rows]
+        except psycopg2.Error as e:
+            print("get_params_by_welded_joint_type:", e)
             return []
