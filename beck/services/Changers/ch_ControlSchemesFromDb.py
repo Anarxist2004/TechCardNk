@@ -147,17 +147,53 @@ def _find_matching_row(current, param_dict, rows: list):
     return None
 
 
+def _ensure_scheme_image_param(
+    data: TechCardData,
+    block: str,
+    scheme_text: str,
+    scheme_image: str,
+) -> None:
+    """Второй параметр «Схема» с val.image; миграция со старого объединённого параметра."""
+    if not data.has_block_and_param(block, scheme_text):
+        return
+    if data.has_block_and_param(block, scheme_image):
+        return
+    pd = _find_param_dict(data, block, scheme_text)
+    img = ""
+    if pd:
+        img = str(pd.get("image") or "").strip()
+        pd.pop("image", None)
+    data.insert_param_to_block(
+        block,
+        2,
+        {
+            "name": scheme_image,
+            "val": {"image": img},
+            "options": [],
+            "typeData": "string",
+            "displayMode": None,
+        },
+    )
+
+
+def _pop_image_from_scheme_text(data: TechCardData, block: str, scheme_text: str) -> None:
+    pd = _find_param_dict(data, block, scheme_text)
+    if pd:
+        pd.pop("image", None)
+
+
 class ControlSchemesFromJointTypeDb(IDataChanger[TechCardData]):
     """
-    Блок «ИСХОДНЫЕ ДАННЫ», параметр «схема просвечивания»:
-    схемы из cheme_control по weld_type_to_scheme для одиночного «Тип сварного соединения».
-    Если на фронте уже выбрана схема и она допустима для текущего набора из БД — val не трогаем.
+    Блок «ИСХОДНЫЕ ДАННЫЕ»:
+    - «схема просвечивания» — текст/каталог (val, options, selectedId);
+    - «Схема» — только val: { image: url } из cheme_control по типу шва.
     """
 
     BLOCK_OBJECT = "Объект контроля"
     BLOCK_SOURCE = "ИСХОДНЫЕ ДАННЫЕ"
     PARAM_JOINT = "Тип сварного соединения"
     PARAM_SCHEME = "схема просвечивания"
+    PARAM_SCHEME_IMAGE = "Схема"
 
     def __init__(self, db: IChemeControlDB):
         self._db = db
@@ -177,41 +213,79 @@ class ControlSchemesFromJointTypeDb(IDataChanger[TechCardData]):
         rows = self._db.get_control_schemes_for_welded_joint(joint_val)
         catalog = _schemes_val(rows)
 
-        if data.has_block_and_param(self.BLOCK_SOURCE, self.PARAM_SCHEME):
-            current = data.get_param_value(self.BLOCK_SOURCE, self.PARAM_SCHEME)
-            param_dict = _find_param_dict(
-                data, self.BLOCK_SOURCE, self.PARAM_SCHEME
-            )
-            if _is_scheme_user_selection(current) and _scheme_allowed_for_rows(
-                current, rows, param_dict
-            ):
-                matched = _find_matching_row(current, param_dict, rows)
-                img = (
-                    _public_image_url(matched.get("image_ref"))
-                    if matched
-                    else ""
-                )
-                data.update_param(
-                    self.BLOCK_SOURCE,
-                    self.PARAM_SCHEME,
-                    {"options": catalog, "image": img},
-                )
-                return data
+        _ensure_scheme_image_param(
+            data,
+            self.BLOCK_SOURCE,
+            self.PARAM_SCHEME,
+            self.PARAM_SCHEME_IMAGE,
+        )
 
-            data.set_param_value(self.BLOCK_SOURCE, self.PARAM_SCHEME, catalog)
-            data.update_param(
+        if not data.has_block_and_param(self.BLOCK_SOURCE, self.PARAM_SCHEME):
+            data.insert_param_to_block(
                 self.BLOCK_SOURCE,
-                self.PARAM_SCHEME,
-                {"options": catalog, "image": ""},
-            )
-        else:
-            data.add_param_to_block(
-                self.BLOCK_SOURCE,
+                1,
                 {
                     "name": self.PARAM_SCHEME,
                     "val": catalog,
+                    "subtitle": "ИСХОДНЫЕ ДАННЫЕ",
                     "options": catalog,
-                    "image": "",
+                    "typeData": "string",
+                    "displayMode": None,
                 },
+            )
+            data.insert_param_to_block(
+                self.BLOCK_SOURCE,
+                2,
+                {
+                    "name": self.PARAM_SCHEME_IMAGE,
+                    "val": {"image": ""},
+                    "options": [],
+                    "typeData": "string",
+                    "displayMode": None,
+                },
+            )
+            return data
+
+        current = data.get_param_value(self.BLOCK_SOURCE, self.PARAM_SCHEME)
+        param_dict = _find_param_dict(
+            data, self.BLOCK_SOURCE, self.PARAM_SCHEME
+        )
+        if _is_scheme_user_selection(current) and _scheme_allowed_for_rows(
+            current, rows, param_dict
+        ):
+            matched = _find_matching_row(current, param_dict, rows)
+            img = (
+                _public_image_url(matched.get("image_ref"))
+                if matched
+                else ""
+            )
+            data.update_param(
+                self.BLOCK_SOURCE,
+                self.PARAM_SCHEME,
+                {"options": catalog},
+            )
+            _pop_image_from_scheme_text(data, self.BLOCK_SOURCE, self.PARAM_SCHEME)
+            if data.has_block_and_param(
+                self.BLOCK_SOURCE, self.PARAM_SCHEME_IMAGE
+            ):
+                data.set_param_value(
+                    self.BLOCK_SOURCE,
+                    self.PARAM_SCHEME_IMAGE,
+                    {"image": img},
+                )
+            return data
+
+        data.set_param_value(self.BLOCK_SOURCE, self.PARAM_SCHEME, catalog)
+        data.update_param(
+            self.BLOCK_SOURCE,
+            self.PARAM_SCHEME,
+            {"options": catalog},
+        )
+        _pop_image_from_scheme_text(data, self.BLOCK_SOURCE, self.PARAM_SCHEME)
+        if data.has_block_and_param(self.BLOCK_SOURCE, self.PARAM_SCHEME_IMAGE):
+            data.set_param_value(
+                self.BLOCK_SOURCE,
+                self.PARAM_SCHEME_IMAGE,
+                {"image": ""},
             )
         return data

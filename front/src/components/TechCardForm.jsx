@@ -246,14 +246,40 @@ const isImageParam = (param) => Boolean(
   ),
 );
 
+/**
+ * Для параметра только с картинкой и без val (и без val2/options/расширенного value) поле ввода не показываем.
+ */
+const imageParamExpectsValueField = (param) => {
+  if (!isImageParam(param)) {
+    return true;
+  }
+  if (param.hasVal2) {
+    return true;
+  }
+  if (Array.isArray(param.options) && param.options.length > 0) {
+    return true;
+  }
+  const v = param.value;
+  if (v === null || v === undefined || v === '') {
+    return false;
+  }
+  if (typeof v === 'object' && !Array.isArray(v)) {
+    const keys = Object.keys(v).filter((k) => k !== 'image');
+    if (keys.length === 0 && v.image) {
+      return false;
+    }
+    return true;
+  }
+  return true;
+};
+
 const isSectionHeaderParam = (param) => param?.displayMode === DISPLAY_MODE_SECTION_HEADER;
 
 const isOperationsRowParam = (param) => param?.displayMode === DISPLAY_MODE_OPERATIONS_ROW;
 
 const isReadOnlyParam = (param) => Boolean(param?.readOnly) || isSectionHeaderParam(param) || isOperationsRowParam(param);
 
-/** Параметры с картинкой (схема) тоже могут иметь поле значения — исключение только readOnly / заголовки / операции. */
-const isEditableParam = (param) => !isReadOnlyParam(param);
+const isEditableParam = (param) => !isReadOnlyParam(param) && imageParamExpectsValueField(param);
 
 const normalizeStaticValue = (value) => {
   if (value === null || value === undefined) {
@@ -1650,7 +1676,7 @@ const TechCardForm = () => {
                                     </tr>
                                   );
 
-                                  if (isReadOnlyParam(param)) {
+                                  if (isReadOnlyParam(param) || !imageParamExpectsValueField(param)) {
                                     return imageRow;
                                   }
 
