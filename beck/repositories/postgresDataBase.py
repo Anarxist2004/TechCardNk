@@ -8,6 +8,7 @@ from repositories.Interfaces.i_params_by_type_welding_joint_db import (
 from repositories.Interfaces.i_cheme_control_db import IChemeControlDB
 from repositories.Interfaces.i_materials_db import IMaterialsDB
 from repositories.Interfaces.i_material_standard_db import IMaterialStandardDB
+from repositories.Interfaces.i_rengen_apparatus_db import IRengenApparatusDB
 from services.tech_card import TechCardData
 from typing import Any, Dict, List, Optional, Union
 import psycopg2
@@ -23,6 +24,7 @@ class PostgresDataBase(
     IChemeControlDB,
     IMaterialsDB,
     IMaterialStandardDB,
+    IRengenApparatusDB,
 ):
 
     def __init__(self, dsn: str):
@@ -315,4 +317,56 @@ class PostgresDataBase(
             return int(value)
         except (psycopg2.Error, TypeError, ValueError) as e:
             print("get_material_standard_id:", e)
+            return None
+
+    def get_rengen_apparatus(self) -> List[Dict[str, Any]]:
+        if not self.cursor:
+            return []
+        try:
+            self.cursor.execute(
+                "SELECT id, name, val, focal_spot_size, voltage_on_tube "
+                "FROM public.rengen_apparatus ORDER BY id"
+            )
+            rows = self.cursor.fetchall()
+            return [dict(r) for r in rows]
+        except psycopg2.Error as e:
+            print("get_rengen_apparatus:", e)
+            return []
+
+    def get_rengen_apparatus_by_name_or_id(
+        self, apparatus_name_or_id: Union[str, int]
+    ) -> Optional[Dict[str, Any]]:
+        if not self.cursor:
+            return None
+        try:
+            if isinstance(apparatus_name_or_id, int):
+                self.cursor.execute(
+                    "SELECT id, name, val, focal_spot_size, voltage_on_tube "
+                    "FROM public.rengen_apparatus WHERE id = %s LIMIT 1",
+                    (apparatus_name_or_id,),
+                )
+            else:
+                key = str(apparatus_name_or_id).strip()
+                if not key:
+                    return None
+                if key.isdigit():
+                    self.cursor.execute(
+                        "SELECT id, name, val, focal_spot_size, voltage_on_tube "
+                        "FROM public.rengen_apparatus WHERE id = %s LIMIT 1",
+                        (int(key),),
+                    )
+                else:
+                    self.cursor.execute(
+                        "SELECT id, name, val, focal_spot_size, voltage_on_tube "
+                        "FROM public.rengen_apparatus "
+                        "WHERE lower(btrim(name::text)) = lower(btrim(%s::text)) "
+                        "OR lower(btrim(coalesce(val, '')::text)) = lower(btrim(%s::text)) "
+                        "ORDER BY id LIMIT 1",
+                        (key, key),
+                    )
+
+            row = self.cursor.fetchone()
+            return dict(row) if row else None
+        except psycopg2.Error as e:
+            print("get_rengen_apparatus_by_name_or_id:", e)
             return None
