@@ -23,6 +23,16 @@ def _apparatus_display_value(row: dict) -> str | None:
     return _non_empty_text(row.get("val")) or _non_empty_text(row.get("name"))
 
 
+def _apparatus_catalog(rows: list[dict]) -> list[dict]:
+    catalog = []
+    for row in rows:
+        display_value = _apparatus_display_value(row)
+        if display_value is None:
+            continue
+        catalog.append({"id": row.get("id"), "name": display_value})
+    return catalog
+
+
 def _find_existing_param_name(
     data: TechCardData, block_name: str, param_names
 ) -> str | None:
@@ -87,11 +97,19 @@ class RengenApparatusFromDb(IDataChanger[TechCardData]):
             for apparatus_name in (_apparatus_display_value(row) for row in rows)
             if apparatus_name is not None
         ]
+        apparatus_catalog = _apparatus_catalog(rows)
 
         apparatus_param_name = _ensure_apparatus_param_name(data)
         apparatus_value = None
         if data.has_block_and_param(BLOCK_SOURCE, apparatus_param_name):
             apparatus_value = data.get_param_value(BLOCK_SOURCE, apparatus_param_name)
+
+        if data.has_block_and_param(BLOCK_SOURCE, apparatus_param_name):
+            data.update_param(
+                BLOCK_SOURCE,
+                apparatus_param_name,
+                {"options": apparatus_catalog},
+            )
 
         if is_scalar_choice(apparatus_value):
             apparatus_row = self._db.get_rengen_apparatus_by_name_or_id(
@@ -116,4 +134,9 @@ class RengenApparatusFromDb(IDataChanger[TechCardData]):
             return data
 
         self._set_or_insert_param(data, PARAM_APPARATUS, apparatus_names, 7)
+        data.update_param(
+            BLOCK_SOURCE,
+            PARAM_APPARATUS,
+            {"options": apparatus_catalog},
+        )
         return data

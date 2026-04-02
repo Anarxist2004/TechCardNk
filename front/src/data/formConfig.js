@@ -42,6 +42,9 @@ export const buildTechCardPayload = (
         ...(param.subtitle !== undefined && param.subtitle !== null && String(param.subtitle).trim() !== ''
           ? { subtitle: String(param.subtitle).trim() }
           : {}),
+        ...(Object.prototype.hasOwnProperty.call(param, 'placeholder')
+          ? { placeholder: param.placeholder }
+          : {}),
         options: resolveParamOptions(param),
         typeData: param.typeData || 'string',
         displayMode: param.displayMode || null,

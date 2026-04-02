@@ -15,6 +15,9 @@ from services.Changers.ch_ControlledZoneWidthStub import ControlledZoneWidthStub
 from services.Changers.ch_ControlSensitivity import ControlSensitivityChanger
 from services.Changers.ch_MaterialsFromDb import MaterialsFromDb
 from services.Changers.ch_RengenApparatusFromDb import RengenApparatusFromDb
+from services.Changers.ch_RengenApparatusForPanoramicScheme import (
+    RengenApparatusForPanoramicScheme,
+)
 from services.Changers.ch_SensitivityEtalonByMaterial import (
     SensitivityEtalonByMaterial,
 )
@@ -35,6 +38,7 @@ def create_pipeline(repos: PostgresDataBase) -> PipeLine:
     pipe_line.addChanger(RengenApparatusFromDb(repos), 0)
     pipe_line.addChanger(ParamsByWeldedJointFromDb(repos), 0)
     pipe_line.addChanger(ControlSensitivityChanger(), 0)
+    pipe_line.addChanger(RengenApparatusForPanoramicScheme(repos), 0)
     pipe_line.addChanger(SensitivityEtalonByMaterial(repos), 0)
     pipe_line.addChanger(ControlledZoneWidthStub(), 0)
     return pipe_line

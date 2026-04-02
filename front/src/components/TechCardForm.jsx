@@ -23,6 +23,21 @@ const DISPLAY_MODE_IMAGE_FULL = 'image_full';
 const DISPLAY_MODE_SECTION_HEADER = 'section_header';
 const DISPLAY_MODE_OPERATIONS_ROW = 'operations_row';
 const DEFAULT_ACTIVE_TAB = 'overview';
+const PANORAMIC_SCHEME_NAME = 'Панорамное просвечивание кольцевого сварного соединения';
+const DISTANCE_PARAM_FRAGMENTS = [
+  'расстояние от иии до поверхности',
+  'контролируемого сварного соединения',
+];
+const SCHEME_PARAM_NAME = 'схема просвечивания';
+const SCHEME_PARAM_FRAGMENT = 'схема просвечивания';
+const NOMINAL_DIAMETER_PARAM_FRAGMENT = 'номинальный диаметр трубы';
+const WALL_THICKNESS_PARAM_FRAGMENT = 'номинальная толщина стенки';
+const FOCAL_SPOT_PARAM_FRAGMENT = 'размер фокусного пятна иии';
+const SENSITIVITY_PARAM_FRAGMENT = 'чувствительность контроля';
+const PANORAMIC_SCHEME_FRAGMENTS = [
+  'панорамное просвечивание',
+  'кольцевого сварного соединения',
+];
 
 const BLOCK_TAB_GROUPS = [
   {
@@ -107,7 +122,70 @@ const normalizeSuggestionOptions = (options) => {
   });
 };
 
-const normalizeComparableText = (value) => String(value ?? '').trim().toLowerCase();
+const normalizeComparableText = (value) => String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+const parseDecimalValue = (value) => {
+  if (value === null || value === undefined || value === '' || Array.isArray(value)) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const normalized = String(value).trim().replace(',', '.');
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parseFocalSpotMax = (value) => {
+  if (value === null || value === undefined || value === '' || Array.isArray(value)) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const normalized = String(value)
+    .trim()
+    .replace(/,/g, '.')
+    .replace(/[×*XХх]/g, 'x');
+
+  if (!normalized) {
+    return null;
+  }
+
+  const matches = normalized.match(/-?\d+(?:\.\d+)?|-?\d*\.\d+/g) || [];
+  if (matches.length === 0) {
+    return null;
+  }
+
+  const parsedValues = matches
+    .map((part) => Number.parseFloat(part))
+    .filter((part) => Number.isFinite(part));
+
+  if (parsedValues.length === 0) {
+    return null;
+  }
+
+  return Math.max(...parsedValues);
+};
+
+const formatRangeNumber = (value) => {
+  if (!Number.isFinite(value)) {
+    return '';
+  }
+
+  return value
+    .toFixed(2)
+    .replace(/\.00$/, '')
+    .replace(/(\.\d*[1-9])0$/, '$1');
+};
 
 const normalizeOptionValues = (options) => {
   if (!Array.isArray(options)) {
@@ -533,6 +611,7 @@ const TableRowInput = ({
   standardValues,
   typeData,
   displayMode,
+  placeholder,
   canCreateOption,
   isCreatingOption,
   hasVal2 = false,
@@ -554,6 +633,8 @@ const TableRowInput = ({
   const suggestionOptions = normalizeSuggestionOptions(standardValues);
   const isNumberOnlyMode = displayMode === DISPLAY_MODE_NUMBER_ONLY;
   const trimmedValue = String(value ?? '').trim();
+  const primaryPlaceholder = placeholder ?? 'Введите значение';
+  const rangePlaceholder = placeholder ?? 'Значение';
   const hasExistingOption = suggestionOptions.some((option) => {
     const optionLabel = normalizeComparableText(option.label || option.value);
     return optionLabel === normalizeComparableText(trimmedValue);
@@ -706,7 +787,7 @@ const TableRowInput = ({
                         value={value}
                         onChange={(event) => handleChange(event.target.value)}
                         onBlur={(event) => handleBlur(event, setTouched)}
-                        placeholder="Значение"
+                        placeholder={rangePlaceholder}
                         rows={1}
                         className={`
                           w-full bg-[#0C1515] border
@@ -788,7 +869,7 @@ const TableRowInput = ({
                   value={value}
                   onChange={(event) => handleChange(event.target.value)}
                   onBlur={(event) => handleBlur(event, setTouched)}
-                  placeholder="Введите значение"
+                  placeholder={primaryPlaceholder}
                   rows={1}
                   className={`
                     w-full bg-[#0C1515] border
@@ -1465,6 +1546,95 @@ const TechCardForm = () => {
     return 'string';
   };
 
+  const getCurrentParamValue = (blockId, param) => {
+    const compositeKey = `${blockId}.${param.id}`;
+    if (Object.prototype.hasOwnProperty.call(paramValues, compositeKey)) {
+      return paramValues[compositeKey];
+    }
+    return param.value;
+  };
+
+  const findCurrentParamValueByName = (paramNames) => {
+    const names = Array.isArray(paramNames) ? paramNames : [paramNames];
+
+    for (const block of blocks) {
+      for (const param of block.params || []) {
+        if (!names.includes(param.name)) {
+          continue;
+        }
+        return getCurrentParamValue(block.id, param);
+      }
+    }
+
+    return null;
+  };
+
+  const findCurrentParamValueByFragment = (fragment) => {
+    const normalizedFragment = normalizeComparableText(fragment);
+
+    for (const block of blocks) {
+      for (const param of block.params || []) {
+        if (!normalizeComparableText(param.name).includes(normalizedFragment)) {
+          continue;
+        }
+        return getCurrentParamValue(block.id, param);
+      }
+    }
+
+    return null;
+  };
+
+  const getDistanceFieldPlaceholder = (param) => {
+    if (param.placeholder !== null && param.placeholder !== undefined && String(param.placeholder) !== '') {
+      return param.placeholder;
+    }
+
+    const normalizedParamName = normalizeComparableText(param.name);
+    if (!DISTANCE_PARAM_FRAGMENTS.every((fragment) => normalizedParamName.includes(fragment))) {
+      return null;
+    }
+
+    const selectedScheme = findCurrentParamValueByName(SCHEME_PARAM_NAME)
+      ?? findCurrentParamValueByFragment(SCHEME_PARAM_FRAGMENT);
+    const normalizedScheme = normalizeComparableText(selectedScheme);
+    if (
+      normalizedScheme !== normalizeComparableText(PANORAMIC_SCHEME_NAME)
+      && !PANORAMIC_SCHEME_FRAGMENTS.every((fragment) => normalizedScheme.includes(fragment))
+    ) {
+      return null;
+    }
+
+    const outerDiameter = parseDecimalValue(findCurrentParamValueByFragment(NOMINAL_DIAMETER_PARAM_FRAGMENT));
+    const wallThickness = parseDecimalValue(findCurrentParamValueByFragment(WALL_THICKNESS_PARAM_FRAGMENT));
+    const sensitivity = parseDecimalValue(findCurrentParamValueByFragment(SENSITIVITY_PARAM_FRAGMENT));
+    const focalSpot = parseFocalSpotMax(findCurrentParamValueByFragment(FOCAL_SPOT_PARAM_FRAGMENT));
+
+    if (
+      !Number.isFinite(outerDiameter)
+      || !Number.isFinite(wallThickness)
+      || !Number.isFinite(sensitivity)
+      || !Number.isFinite(focalSpot)
+      || outerDiameter <= 0
+      || wallThickness < 0
+      || sensitivity <= 0
+    ) {
+      return null;
+    }
+
+    const innerDiameter = outerDiameter - (2 * wallThickness);
+    if (!(innerDiameter > 0) || !(outerDiameter > innerDiameter) || (innerDiameter / outerDiameter) < 0.8) {
+      return null;
+    }
+
+    const minDistance = (focalSpot * (outerDiameter - innerDiameter)) / sensitivity;
+    const maxDistance = innerDiameter / 2;
+    if (!Number.isFinite(minDistance) || !Number.isFinite(maxDistance)) {
+      return null;
+    }
+
+    return `${formatRangeNumber(minDistance)}<f<=${formatRangeNumber(maxDistance)}`;
+  };
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
 
@@ -1746,6 +1916,7 @@ const TechCardForm = () => {
                                         standardValues={getStandardValuesForParam(param, block.id)}
                                         typeData={getParamTypeData(param)}
                                         displayMode={param.displayMode}
+                                        placeholder={getDistanceFieldPlaceholder(param)}
                                         canCreateOption={param.canCreateOption}
                                         isCreatingOption={savingOptionKey === compositeKey}
                                       />
@@ -1781,6 +1952,7 @@ const TechCardForm = () => {
                                     standardValues={getStandardValuesForParam(param, block.id)}
                                     typeData={getParamTypeData(param)}
                                     displayMode={param.displayMode}
+                                    placeholder={getDistanceFieldPlaceholder(param)}
                                     canCreateOption={param.canCreateOption}
                                     isCreatingOption={savingOptionKey === compositeKey}
                                   />

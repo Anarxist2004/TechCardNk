@@ -87,6 +87,7 @@ function transformBlocksResponse(data) {
           syncOnSelect: Boolean(param.syncOnSelect),
           readOnly: Boolean(param.readOnly),
           image: param.image || null,
+          placeholder: param.placeholder ?? null,
           ...(rawSubtitle !== undefined && rawSubtitle !== null && String(rawSubtitle).trim() !== ''
             ? { subtitle: String(rawSubtitle).trim() }
             : {}),
