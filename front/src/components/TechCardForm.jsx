@@ -22,7 +22,6 @@ const DISPLAY_MODE_NUMBER_ONLY = 'number_only';
 const DISPLAY_MODE_IMAGE_FULL = 'image_full';
 const DISPLAY_MODE_SECTION_HEADER = 'section_header';
 const DISPLAY_MODE_OPERATIONS_ROW = 'operations_row';
-const GAZPROM_SCHEME_PARAM_KEY = '6.1';
 const DEFAULT_ACTIVE_TAB = 'overview';
 
 const BLOCK_TAB_GROUPS = [
@@ -107,6 +106,8 @@ const normalizeSuggestionOptions = (options) => {
     };
   });
 };
+
+const normalizeComparableText = (value) => String(value ?? '').trim().toLowerCase();
 
 const normalizeOptionValues = (options) => {
   if (!Array.isArray(options)) {
@@ -378,9 +379,15 @@ const buildFormStateFromBlocks = (blocks = []) => {
     block.params.forEach((param) => {
       const compositeKey = `${block.id}.${param.id}`;
       if (isEditableParam(param)) {
-        values[compositeKey] = getInputValueFromParam(param, '');
+        const inputValue = getInputValueFromParam(param, undefined);
+        if (inputValue !== undefined) {
+          values[compositeKey] = inputValue;
+        }
         if (param.hasVal2) {
-          values2[compositeKey] = getInputValue2FromParam(param, '');
+          const inputValue2 = getInputValue2FromParam(param, undefined);
+          if (inputValue2 !== undefined) {
+            values2[compositeKey] = inputValue2;
+          }
         }
       }
 
@@ -521,6 +528,7 @@ const TableRowInput = ({
   value2 = '',
   onChange,
   onChange2,
+  onCommit,
   onCreateOption,
   standardValues,
   typeData,
@@ -536,6 +544,7 @@ const TableRowInput = ({
   const textareaRef = React.useRef(null);
   const textarea2Ref = React.useRef(null);
   const dropdownAnchorRef = React.useRef(null);
+  const skipNextBlurCommitRef = React.useRef(false);
 
   const validation = validateByType(value, typeData);
   const validation2 = hasVal2 ? validateByType(value2, typeData) : { isValid: true, error: null };
@@ -544,10 +553,10 @@ const TableRowInput = ({
   const typeHint = getTypeHint(typeData);
   const suggestionOptions = normalizeSuggestionOptions(standardValues);
   const isNumberOnlyMode = displayMode === DISPLAY_MODE_NUMBER_ONLY;
-  const trimmedValue = String(value || '').trim();
+  const trimmedValue = String(value ?? '').trim();
   const hasExistingOption = suggestionOptions.some((option) => {
-    const optionLabel = String(option.label || option.value || '').trim().toLowerCase();
-    return optionLabel === trimmedValue.toLowerCase();
+    const optionLabel = normalizeComparableText(option.label || option.value);
+    return optionLabel === normalizeComparableText(trimmedValue);
   });
   const canSaveOption = Boolean(canCreateOption && onCreateOption) && trimmedValue !== '' && !hasExistingOption;
   const hasActionButtons = suggestionOptions.length > 0 || canSaveOption || isCreatingOption;
@@ -626,6 +635,38 @@ const TableRowInput = ({
     onChange2(nextValue);
   };
 
+  const handleBlur = (event, setTouchedState) => {
+    setTouchedState(true);
+
+    if (dropdownAnchorRef.current?.contains(event.relatedTarget)) {
+      return;
+    }
+
+    if (skipNextBlurCommitRef.current) {
+      skipNextBlurCommitRef.current = false;
+      return;
+    }
+
+    onCommit?.();
+  };
+
+  const markNextBlurCommitToSkip = () => {
+    skipNextBlurCommitRef.current = true;
+  };
+
+  const handleControlBlur = (event) => {
+    if (dropdownAnchorRef.current?.contains(event.relatedTarget)) {
+      return;
+    }
+
+    if (skipNextBlurCommitRef.current) {
+      skipNextBlurCommitRef.current = false;
+      return;
+    }
+
+    onCommit?.();
+  };
+
   return (
     <tr className="border-b border-[#646C89]/20 hover:bg-[#646C89]/10">
       {!isNumberOnlyMode && (
@@ -664,7 +705,7 @@ const TableRowInput = ({
                         ref={textareaRef}
                         value={value}
                         onChange={(event) => handleChange(event.target.value)}
-                        onBlur={() => setTouched(true)}
+                        onBlur={(event) => handleBlur(event, setTouched)}
                         placeholder="Значение"
                         rows={1}
                         className={`
@@ -685,6 +726,7 @@ const TableRowInput = ({
                         <button
                           type="button"
                           onClick={() => onCreateOption?.()}
+                          onBlur={handleControlBlur}
                           disabled={isCreatingOption}
                           className={`absolute top-1/2 -translate-y-1/2 text-[#646C89] hover:text-[#35C759] ${suggestionOptions.length > 0 ? 'right-8' : 'right-2'}`}
                           title="Сохранить значение в справочник"
@@ -696,6 +738,7 @@ const TableRowInput = ({
                         <button
                           type="button"
                           onClick={() => setIsOpen((prev) => !prev)}
+                          onBlur={handleControlBlur}
                           className="absolute top-1/2 -translate-y-1/2 right-2 text-[#646C89] hover:text-[#D97B54]"
                         >
                           <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -710,7 +753,7 @@ const TableRowInput = ({
                       ref={textarea2Ref}
                       value={value2}
                       onChange={(event) => handleChange2(event.target.value)}
-                      onBlur={() => setTouched2(true)}
+                      onBlur={(event) => handleBlur(event, setTouched2)}
                       placeholder="Значение"
                       rows={1}
                       className={`
@@ -744,7 +787,7 @@ const TableRowInput = ({
                   ref={textareaRef}
                   value={value}
                   onChange={(event) => handleChange(event.target.value)}
-                  onBlur={() => setTouched(true)}
+                  onBlur={(event) => handleBlur(event, setTouched)}
                   placeholder="Введите значение"
                   rows={1}
                   className={`
@@ -765,6 +808,7 @@ const TableRowInput = ({
                   <button
                     type="button"
                     onClick={() => onCreateOption?.()}
+                    onBlur={handleControlBlur}
                     disabled={isCreatingOption}
                     className={`absolute top-1/2 -translate-y-1/2 text-[#646C89] hover:text-[#35C759] ${suggestionOptions.length > 0 ? 'right-8' : 'right-2'}`}
                     title="Сохранить значение в справочник"
@@ -776,6 +820,7 @@ const TableRowInput = ({
                   <button
                     type="button"
                     onClick={() => setIsOpen((prev) => !prev)}
+                    onBlur={handleControlBlur}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-[#646C89] hover:text-[#D97B54]"
                   >
                     <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -801,8 +846,10 @@ const TableRowInput = ({
                     <button
                       key={`${option.id ?? option.value}_${index}`}
                       type="button"
+                      onMouseDown={markNextBlurCommitToSkip}
                       onClick={() => {
                         onChange(option.value, option.id);
+                        onCommit?.();
                         setIsOpen(false);
                         setTouched(true);
                       }}
@@ -1169,22 +1216,6 @@ const TechCardForm = () => {
     return matchedBlock.params.find((param) => String(param.id) === paramId) || null;
   };
 
-  const shouldSyncParamSelection = (compositeKey, selectedOptionId) => {
-    const hasSelectedOption = selectedOptionId !== null
-      && selectedOptionId !== undefined
-      && selectedOptionId !== '';
-
-    if (!hasSelectedOption) {
-      return false;
-    }
-
-    if (compositeKey === GAZPROM_SCHEME_PARAM_KEY) {
-      return true;
-    }
-
-    return Boolean(getParamByCompositeKey(compositeKey)?.syncOnSelect);
-  };
-
   const syncTechCardToServer = async (vals, vals2, selIds) => {
     try {
       const techCardPayload = buildTechCardPayload(
@@ -1205,12 +1236,57 @@ const TechCardForm = () => {
     }
   };
 
-  const handleParamChange = async (compositeKey, value, selectedOptionId = null) => {
+  const resolveMatchingStandardOption = (standardValues, rawValue) => {
+    const normalizedValue = normalizeComparableText(rawValue);
+
+    if (!normalizedValue) {
+      return null;
+    }
+
+    return normalizeSuggestionOptions(standardValues).find((option) => (
+      normalizeComparableText(option.value) === normalizedValue
+    )) || null;
+  };
+
+  const commitParamChange = async (compositeKey) => {
+    clearParamSyncTimer();
+
+    const updatedSelectedOptionIds = { ...selectedOptionIdsRef.current };
+    const currentValue = paramValuesRef.current[compositeKey];
+    const normalizedValue = normalizeComparableText(currentValue);
+
+    if (!normalizedValue) {
+      delete updatedSelectedOptionIds[compositeKey];
+    } else {
+      const param = getParamByCompositeKey(compositeKey);
+      const [blockId] = String(compositeKey).split('.');
+      const matchedOption = param
+        ? resolveMatchingStandardOption(getStandardValuesForParam(param, blockId), currentValue)
+        : null;
+
+      if (matchedOption?.id !== null && matchedOption?.id !== undefined && matchedOption?.id !== '') {
+        updatedSelectedOptionIds[compositeKey] = String(matchedOption.id);
+      } else {
+        delete updatedSelectedOptionIds[compositeKey];
+      }
+    }
+
+    selectedOptionIdsRef.current = updatedSelectedOptionIds;
+    setSelectedOptionIds(updatedSelectedOptionIds);
+
+    await syncTechCardToServer(
+      paramValuesRef.current,
+      paramValues2Ref.current,
+      updatedSelectedOptionIds,
+    );
+  };
+
+  const handleParamChange = (compositeKey, value, selectedOptionId = null) => {
     const updatedValues = {
-      ...paramValues,
+      ...paramValuesRef.current,
       [compositeKey]: value,
     };
-    const updatedSelectedOptionIds = { ...selectedOptionIds };
+    const updatedSelectedOptionIds = { ...selectedOptionIdsRef.current };
 
     if (selectedOptionId !== null && selectedOptionId !== undefined && selectedOptionId !== '') {
       updatedSelectedOptionIds[compositeKey] = String(selectedOptionId);
@@ -1222,50 +1298,20 @@ const TechCardForm = () => {
     selectedOptionIdsRef.current = updatedSelectedOptionIds;
     setParamValues(updatedValues);
     setSelectedOptionIds(updatedSelectedOptionIds);
-
-    const hasExplicitSelection = selectedOptionId !== null
-      && selectedOptionId !== undefined
-      && selectedOptionId !== '';
-
-    clearParamSyncTimer();
-
-    if (hasExplicitSelection) {
-      await syncTechCardToServer(updatedValues, paramValues2Ref.current, updatedSelectedOptionIds);
-      return;
-    }
-
-    paramSyncTimerRef.current = setTimeout(() => {
-      paramSyncTimerRef.current = null;
-      void syncTechCardToServer(
-        paramValuesRef.current,
-        paramValues2Ref.current,
-        selectedOptionIdsRef.current,
-      );
-    }, 400);
   };
 
   const handleParamValue2Change = (compositeKey, value2) => {
     const updatedValues2 = {
-      ...paramValues2,
+      ...paramValues2Ref.current,
       [compositeKey]: value2,
     };
     paramValues2Ref.current = updatedValues2;
     setParamValues2(updatedValues2);
-
-    clearParamSyncTimer();
-    paramSyncTimerRef.current = setTimeout(() => {
-      paramSyncTimerRef.current = null;
-      void syncTechCardToServer(
-        paramValuesRef.current,
-        paramValues2Ref.current,
-        selectedOptionIdsRef.current,
-      );
-    }, 400);
   };
 
   const handleCreateParamOption = async (blockId, param) => {
     const compositeKey = `${blockId}.${param.id}`;
-    const currentValue = String(paramValues[compositeKey] || '').trim();
+    const currentValue = String(paramValuesRef.current[compositeKey] ?? '').trim();
 
     if (!currentValue) {
       return;
@@ -1278,9 +1324,9 @@ const TechCardForm = () => {
         objectType,
         DEFAULT_METHODOLOGY,
         blocks,
-        paramValues,
-        selectedOptionIds,
-        paramValues2,
+        paramValuesRef.current,
+        selectedOptionIdsRef.current,
+        paramValues2Ref.current,
       );
 
       const result = await api.createParamOption({
@@ -1301,17 +1347,21 @@ const TechCardForm = () => {
         ? { id: String(savedId), name: savedName }
         : savedName;
 
-      setParamValues((prev) => ({
-        ...prev,
+      const updatedValues = {
+        ...paramValuesRef.current,
         [compositeKey]: savedName,
-      }));
+      };
+      paramValuesRef.current = updatedValues;
+      setParamValues(updatedValues);
 
+      const updatedSelectedOptionIds = { ...selectedOptionIdsRef.current };
       if (savedId !== null && savedId !== undefined) {
-        setSelectedOptionIds((prev) => ({
-          ...prev,
-          [compositeKey]: String(savedId),
-        }));
+        updatedSelectedOptionIds[compositeKey] = String(savedId);
+      } else {
+        delete updatedSelectedOptionIds[compositeKey];
       }
+      selectedOptionIdsRef.current = updatedSelectedOptionIds;
+      setSelectedOptionIds(updatedSelectedOptionIds);
 
       setStandardValuesCache((prev) => {
         const currentOptions = prev[compositeKey]?.length > 0
@@ -1320,10 +1370,10 @@ const TechCardForm = () => {
 
         const optionExists = currentOptions.some((option) => {
           if (typeof option === 'object' && option !== null) {
-            return String(option.name || '').trim().toLowerCase() === savedName.toLowerCase();
+            return normalizeComparableText(option.name) === normalizeComparableText(savedName);
           }
 
-          return String(option).trim().toLowerCase() === savedName.toLowerCase();
+          return normalizeComparableText(option) === normalizeComparableText(savedName);
         });
 
         if (optionExists) {
@@ -1336,9 +1386,7 @@ const TechCardForm = () => {
         };
       });
 
-      if (shouldSyncParamSelection(compositeKey, savedId !== null && savedId !== undefined ? String(savedId) : null)) {
-        await handleParamChange(compositeKey, savedName, String(savedId));
-      }
+      await commitParamChange(compositeKey);
 
       alert(result.message || 'Значение сохранено');
     } catch (error) {
@@ -1686,13 +1734,14 @@ const TechCardForm = () => {
                                       <TableRowInput
                                         paramKey={compositeKey}
                                         paramName={param.name}
-                                        value={paramValues[compositeKey] || ''}
+                                        value={paramValues[compositeKey] ?? ''}
                                         value2={param.hasVal2 ? (paramValues2[compositeKey] ?? '') : ''}
                                         hasVal2={Boolean(param.hasVal2)}
                                         onChange={(nextValue, selectedId) => handleParamChange(compositeKey, nextValue, selectedId)}
                                         onChange2={param.hasVal2
                                           ? (next) => handleParamValue2Change(compositeKey, next)
                                           : undefined}
+                                        onCommit={() => commitParamChange(compositeKey)}
                                         onCreateOption={() => handleCreateParamOption(block.id, param)}
                                         standardValues={getStandardValuesForParam(param, block.id)}
                                         typeData={getParamTypeData(param)}
@@ -1720,13 +1769,14 @@ const TechCardForm = () => {
                                     key={compositeKey}
                                     paramKey={compositeKey}
                                     paramName={param.name}
-                                    value={paramValues[compositeKey] || ''}
+                                    value={paramValues[compositeKey] ?? ''}
                                     value2={param.hasVal2 ? (paramValues2[compositeKey] ?? '') : ''}
                                     hasVal2={Boolean(param.hasVal2)}
                                     onChange={(nextValue, selectedId) => handleParamChange(compositeKey, nextValue, selectedId)}
                                     onChange2={param.hasVal2
                                       ? (next) => handleParamValue2Change(compositeKey, next)
                                       : undefined}
+                                    onCommit={() => commitParamChange(compositeKey)}
                                     onCreateOption={() => handleCreateParamOption(block.id, param)}
                                     standardValues={getStandardValuesForParam(param, block.id)}
                                     typeData={getParamTypeData(param)}

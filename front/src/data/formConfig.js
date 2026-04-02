@@ -2,6 +2,18 @@ import api from '../services/api';
 
 export const updateTechCard = (techCardData) => api.updateTechCard(techCardData);
 
+const resolveParamOptions = (param) => {
+  if (Array.isArray(param.options) && param.options.length > 0) {
+    return param.options;
+  }
+
+  if (Array.isArray(param.value) && param.value.length > 0) {
+    return param.value;
+  }
+
+  return [];
+};
+
 export const buildTechCardPayload = (
   type,
   methodology,
@@ -22,21 +34,23 @@ export const buildTechCardPayload = (
       const compositeKey = `${block.id}.${param.id}`;
       const value = paramValues[compositeKey];
       const selectedId = selectedOptionIds[compositeKey];
+      const hasValueOverride = Object.prototype.hasOwnProperty.call(paramValues, compositeKey);
 
       const cell = {
         name: param.name,
-        val: value !== undefined && value !== '' ? value : param.value,
+        val: hasValueOverride ? value : param.value,
         ...(param.subtitle !== undefined && param.subtitle !== null && String(param.subtitle).trim() !== ''
           ? { subtitle: String(param.subtitle).trim() }
           : {}),
-        options: Array.isArray(param.options) ? param.options : [],
+        options: resolveParamOptions(param),
         typeData: param.typeData || 'string',
         displayMode: param.displayMode || null,
       };
 
       if (param.hasVal2) {
         const value2 = paramValues2[compositeKey];
-        cell.val2 = value2 !== undefined && value2 !== '' ? value2 : param.value2;
+        const hasValue2Override = Object.prototype.hasOwnProperty.call(paramValues2, compositeKey);
+        cell.val2 = hasValue2Override ? value2 : param.value2;
       }
 
       params[block.id].params[param.id] = cell;
