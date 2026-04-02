@@ -12,10 +12,11 @@ from services.Changers.ch_WeldedJointDiagramFromDb import WeldedJointDiagramFrom
 from services.Changers.ch_ParamsByWeldedJointFromDb import ParamsByWeldedJointFromDb
 from services.Changers.ch_ControlSchemesFromDb import ControlSchemesFromJointTypeDb
 from services.Changers.ch_ControlledZoneWidthStub import ControlledZoneWidthStub
+from services.Changers.ch_ControlSensitivity import ControlSensitivityChanger
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
-DB_DSN = "host=localhost port=5435 dbname=victor user=postgres password=1"
+DB_DSN = "host=localhost port=5432 dbname=victor user=postgres password=admin"
 
 
 def create_pipeline(repos: PostgresDataBase) -> PipeLine:
@@ -26,6 +27,7 @@ def create_pipeline(repos: PostgresDataBase) -> PipeLine:
     pipe_line.addChanger(WeldedJointDiagramFromDb(repos), 0)
     pipe_line.addChanger(ControlSchemesFromJointTypeDb(repos), 0)
     pipe_line.addChanger(ParamsByWeldedJointFromDb(repos), 0)
+    pipe_line.addChanger(ControlSensitivityChanger(), 0)
     pipe_line.addChanger(ControlledZoneWidthStub(), 0)
     return pipe_line
 

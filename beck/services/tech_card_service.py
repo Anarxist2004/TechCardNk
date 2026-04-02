@@ -26,6 +26,11 @@ class TechCardService(IServise):
         )
         card.insert_param_to_block(
             card.get("1")["name"],
+            2,
+            {"name": "Уровень качества", "val": ['A', 'B', 'C']},
+        )
+        card.insert_param_to_block(
+            card.get("1")["name"],
             1,
             {"name": "НАИМЕНОВАНИЕ ОРГАНИЗАЦИИ", "val": None},
         )
