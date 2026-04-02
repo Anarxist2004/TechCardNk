@@ -24,6 +24,7 @@ const DISPLAY_MODE_SECTION_HEADER = 'section_header';
 const DISPLAY_MODE_OPERATIONS_ROW = 'operations_row';
 const DEFAULT_ACTIVE_TAB = 'overview';
 const PANORAMIC_SCHEME_NAME = 'Панорамное просвечивание кольцевого сварного соединения';
+const DOUBLE_WALL_SCHEME_NAME = 'Кольцевое сварное соединение через две стенки';
 const DISTANCE_PARAM_FRAGMENTS = [
   'расстояние от иии до поверхности',
   'контролируемого сварного соединения',
@@ -34,9 +35,14 @@ const NOMINAL_DIAMETER_PARAM_FRAGMENT = 'номинальный диаметр �
 const WALL_THICKNESS_PARAM_FRAGMENT = 'номинальная толщина стенки';
 const FOCAL_SPOT_PARAM_FRAGMENT = 'размер фокусного пятна иии';
 const SENSITIVITY_PARAM_FRAGMENT = 'чувствительность контроля';
+const QUALITY_PARAM_FRAGMENT = 'уровень качества';
 const PANORAMIC_SCHEME_FRAGMENTS = [
   'панорамное просвечивание',
   'кольцевого сварного соединения',
+];
+const DOUBLE_WALL_SCHEME_FRAGMENTS = [
+  'кольцевое сварное соединение',
+  'через две стенки',
 ];
 
 const BLOCK_TAB_GROUPS = [
@@ -124,6 +130,11 @@ const normalizeSuggestionOptions = (options) => {
 
 const normalizeComparableText = (value) => String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 
+const matchesAllFragments = (value, fragments) => {
+  const normalizedValue = normalizeComparableText(value);
+  return normalizedValue !== '' && fragments.every((fragment) => normalizedValue.includes(fragment));
+};
+
 const parseDecimalValue = (value) => {
   if (value === null || value === undefined || value === '' || Array.isArray(value)) {
     return null;
@@ -185,6 +196,15 @@ const formatRangeNumber = (value) => {
     .toFixed(2)
     .replace(/\.00$/, '')
     .replace(/(\.\d*[1-9])0$/, '$1');
+};
+
+const parseQualityValue = (value) => {
+  if (value === null || value === undefined || Array.isArray(value)) {
+    return null;
+  }
+
+  const normalized = String(value).trim().toUpperCase();
+  return ['A', 'B', 'C'].includes(normalized) ? normalized : null;
 };
 
 const normalizeOptionValues = (options) => {
@@ -1584,26 +1604,7 @@ const TechCardForm = () => {
     return null;
   };
 
-  const getDistanceFieldPlaceholder = (param) => {
-    if (param.placeholder !== null && param.placeholder !== undefined && String(param.placeholder) !== '') {
-      return param.placeholder;
-    }
-
-    const normalizedParamName = normalizeComparableText(param.name);
-    if (!DISTANCE_PARAM_FRAGMENTS.every((fragment) => normalizedParamName.includes(fragment))) {
-      return null;
-    }
-
-    const selectedScheme = findCurrentParamValueByName(SCHEME_PARAM_NAME)
-      ?? findCurrentParamValueByFragment(SCHEME_PARAM_FRAGMENT);
-    const normalizedScheme = normalizeComparableText(selectedScheme);
-    if (
-      normalizedScheme !== normalizeComparableText(PANORAMIC_SCHEME_NAME)
-      && !PANORAMIC_SCHEME_FRAGMENTS.every((fragment) => normalizedScheme.includes(fragment))
-    ) {
-      return null;
-    }
-
+  const buildPanoramicDistancePlaceholder = () => {
     const outerDiameter = parseDecimalValue(findCurrentParamValueByFragment(NOMINAL_DIAMETER_PARAM_FRAGMENT));
     const wallThickness = parseDecimalValue(findCurrentParamValueByFragment(WALL_THICKNESS_PARAM_FRAGMENT));
     const sensitivity = parseDecimalValue(findCurrentParamValueByFragment(SENSITIVITY_PARAM_FRAGMENT));
@@ -1633,6 +1634,96 @@ const TechCardForm = () => {
     }
 
     return `${formatRangeNumber(minDistance)}<f<=${formatRangeNumber(maxDistance)}`;
+  };
+
+  const buildDoubleWallDistancePlaceholder = () => {
+    const outerDiameter = parseDecimalValue(findCurrentParamValueByFragment(NOMINAL_DIAMETER_PARAM_FRAGMENT));
+    const wallThickness = parseDecimalValue(findCurrentParamValueByFragment(WALL_THICKNESS_PARAM_FRAGMENT));
+    const sensitivity = parseDecimalValue(findCurrentParamValueByFragment(SENSITIVITY_PARAM_FRAGMENT));
+    const focalSpot = parseFocalSpotMax(findCurrentParamValueByFragment(FOCAL_SPOT_PARAM_FRAGMENT));
+    const quality = parseQualityValue(findCurrentParamValueByFragment(QUALITY_PARAM_FRAGMENT));
+
+    if (
+      !Number.isFinite(outerDiameter)
+      || !Number.isFinite(wallThickness)
+      || !Number.isFinite(sensitivity)
+      || !Number.isFinite(focalSpot)
+      || !quality
+      || outerDiameter <= 0
+      || wallThickness < 0
+      || sensitivity <= 0
+    ) {
+      return null;
+    }
+
+    const innerDiameter = outerDiameter - (2 * wallThickness);
+    if (!(innerDiameter > 0) || !(outerDiameter > innerDiameter)) {
+      return null;
+    }
+
+    const imageClassFactor = quality === 'A'
+      ? 1.2
+      : quality === 'B'
+        ? 1.1
+        : 1.5;
+    const radiationThickness = 2 * wallThickness;
+
+    let cFactorMultiplier = null;
+    if (quality === 'A') {
+      cFactorMultiplier = radiationThickness <= 100 ? 2 : 3;
+    } else if (quality === 'B') {
+      if (radiationThickness <= 50) {
+        cFactorMultiplier = 2;
+      } else if (radiationThickness <= 100) {
+        cFactorMultiplier = 3;
+      } else {
+        cFactorMultiplier = 4;
+      }
+    } else if (quality === 'C') {
+      cFactorMultiplier = 2;
+    }
+
+    if (!Number.isFinite(cFactorMultiplier)) {
+      return null;
+    }
+
+    const cFactor = (cFactorMultiplier * focalSpot) / sensitivity;
+    const minDistance = Math.max(
+      0,
+      (1.2 * cFactor * imageClassFactor * wallThickness) - ((outerDiameter + innerDiameter) / 2),
+    );
+
+    return `f>=${formatRangeNumber(minDistance)}`;
+  };
+
+  const getDistanceFieldPlaceholder = (param) => {
+    if (param.placeholder !== null && param.placeholder !== undefined && String(param.placeholder) !== '') {
+      return param.placeholder;
+    }
+
+    const normalizedParamName = normalizeComparableText(param.name);
+    if (!DISTANCE_PARAM_FRAGMENTS.every((fragment) => normalizedParamName.includes(fragment))) {
+      return null;
+    }
+
+    const selectedScheme = findCurrentParamValueByName(SCHEME_PARAM_NAME)
+      ?? findCurrentParamValueByFragment(SCHEME_PARAM_FRAGMENT);
+    const normalizedScheme = normalizeComparableText(selectedScheme);
+    if (
+      normalizedScheme === normalizeComparableText(PANORAMIC_SCHEME_NAME)
+      || matchesAllFragments(normalizedScheme, PANORAMIC_SCHEME_FRAGMENTS)
+    ) {
+      return buildPanoramicDistancePlaceholder();
+    }
+
+    if (
+      normalizedScheme === normalizeComparableText(DOUBLE_WALL_SCHEME_NAME)
+      || matchesAllFragments(normalizedScheme, DOUBLE_WALL_SCHEME_FRAGMENTS)
+    ) {
+      return buildDoubleWallDistancePlaceholder();
+    }
+
+    return null;
   };
 
   const handleSubmit = async () => {
