@@ -13,6 +13,7 @@ from services.Changers.ch_ParamsByWeldedJointFromDb import ParamsByWeldedJointFr
 from services.Changers.ch_ControlSchemesFromDb import ControlSchemesFromJointTypeDb
 from services.Changers.ch_ControlledZoneWidthStub import ControlledZoneWidthStub
 from services.Changers.ch_ControlSensitivity import ControlSensitivityChanger
+from services.Changers.ch_MaterialsFromDb import MaterialsFromDb
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
@@ -26,6 +27,7 @@ def create_pipeline(repos: PostgresDataBase) -> PipeLine:
     pipe_line.addChanger(TypeOfWeldedJointFromDb(repos), 0)
     pipe_line.addChanger(WeldedJointDiagramFromDb(repos), 0)
     pipe_line.addChanger(ControlSchemesFromJointTypeDb(repos), 0)
+    pipe_line.addChanger(MaterialsFromDb(repos), 0)
     pipe_line.addChanger(ParamsByWeldedJointFromDb(repos), 0)
     pipe_line.addChanger(ControlSensitivityChanger(), 0)
     pipe_line.addChanger(ControlledZoneWidthStub(), 0)

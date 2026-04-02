@@ -6,6 +6,7 @@ from repositories.Interfaces.i_params_by_type_welding_joint_db import (
     IParamsByTypeWeldingJointDB,
 )
 from repositories.Interfaces.i_cheme_control_db import IChemeControlDB
+from repositories.Interfaces.i_materials_db import IMaterialsDB
 from services.tech_card import TechCardData
 from typing import Any, Dict, List, Optional, Union
 import psycopg2
@@ -19,6 +20,7 @@ class PostgresDataBase(
     ITypeOfWeldedJointDB,
     IParamsByTypeWeldingJointDB,
     IChemeControlDB,
+    IMaterialsDB,
 ):
 
     def __init__(self, dsn: str):
@@ -258,4 +260,17 @@ class PostgresDataBase(
             return [dict(r) for r in rows]
         except psycopg2.Error as e:
             print("get_control_schemes_for_welded_joint:", e)
+            return []
+
+    def get_materials(self) -> List[Dict[str, Any]]:
+        if not self.cursor:
+            return []
+        try:
+            self.cursor.execute(
+                "SELECT id, material FROM public.type_metall ORDER BY id"
+            )
+            rows = self.cursor.fetchall()
+            return [dict(r) for r in rows]
+        except psycopg2.Error as e:
+            print("get_materials:", e)
             return []
