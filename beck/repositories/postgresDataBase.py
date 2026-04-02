@@ -7,6 +7,7 @@ from repositories.Interfaces.i_params_by_type_welding_joint_db import (
 )
 from repositories.Interfaces.i_cheme_control_db import IChemeControlDB
 from repositories.Interfaces.i_materials_db import IMaterialsDB
+from repositories.Interfaces.i_material_standard_db import IMaterialStandardDB
 from services.tech_card import TechCardData
 from typing import Any, Dict, List, Optional, Union
 import psycopg2
@@ -21,6 +22,7 @@ class PostgresDataBase(
     IParamsByTypeWeldingJointDB,
     IChemeControlDB,
     IMaterialsDB,
+    IMaterialStandardDB,
 ):
 
     def __init__(self, dsn: str):
@@ -274,3 +276,43 @@ class PostgresDataBase(
         except psycopg2.Error as e:
             print("get_materials:", e)
             return []
+
+    def get_material_standard_id(
+        self, material_name_or_id: Union[str, int]
+    ) -> Optional[int]:
+        if not self.cursor:
+            return None
+        try:
+            if isinstance(material_name_or_id, int):
+                self.cursor.execute(
+                    "SELECT id_standard FROM public.type_metall WHERE id = %s",
+                    (material_name_or_id,),
+                )
+            else:
+                key = str(material_name_or_id).strip()
+                if not key:
+                    return None
+                if key.isdigit():
+                    self.cursor.execute(
+                        "SELECT id_standard FROM public.type_metall WHERE id = %s",
+                        (int(key),),
+                    )
+                else:
+                    self.cursor.execute(
+                        "SELECT id_standard FROM public.type_metall "
+                        "WHERE lower(btrim(material::text)) = lower(btrim(%s::text)) "
+                        "LIMIT 1",
+                        (key,),
+                    )
+
+            row = self.cursor.fetchone()
+            if not row:
+                return None
+
+            value = row.get("id_standard") if isinstance(row, dict) else row["id_standard"]
+            if value is None:
+                return None
+            return int(value)
+        except (psycopg2.Error, TypeError, ValueError) as e:
+            print("get_material_standard_id:", e)
+            return None
