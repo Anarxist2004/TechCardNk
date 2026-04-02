@@ -45,6 +45,26 @@ def _normalize_text(value) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip().lower()
 
 
+def scheme_selection_label(value):
+    """Текст выбранной схемы из val (строка или {name, val})."""
+    if value is None or isinstance(value, (list, tuple)):
+        return None
+    if isinstance(value, dict):
+        v = value.get("name") or value.get("val")
+        if isinstance(v, (list, tuple)):
+            return None
+        return v
+    return value
+
+
+def is_ellipse_frontal_scheme_value(value) -> bool:
+    """Схема 7.3: фронтальное просвечивание «на эллипс» (не путать с 7.2)."""
+    n = _normalize_text(scheme_selection_label(value))
+    if not n:
+        return False
+    return "фронтальное просвечивание" in n and "на эллипс" in n
+
+
 def _non_empty_text(value) -> str | None:
     text = str(value).strip() if value is not None else ""
     return text or None
@@ -274,10 +294,11 @@ def _set_distance_placeholder(data: TechCardData, placeholder: str | None) -> No
     if match is None:
         return
     _, actual_name, _ = match
+    # Фронт может читать hint вместо placeholder — дублируем.
     data.update_param(
         BLOCK_SOURCE,
         actual_name,
-        {"placeholder": placeholder},
+        {"placeholder": placeholder, "hint": placeholder},
     )
 
 

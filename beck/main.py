@@ -21,13 +21,16 @@ from services.Changers.ch_RengenApparatusForPanoramicScheme import (
 from services.Changers.ch_RengenDistanceForDoubleWallScheme import (
     RengenDistanceForDoubleWallScheme,
 )
+from services.Changers.ch_RengenDistanceForEllipseFrontalScheme import (
+    RengenDistanceForEllipseFrontalScheme,
+)
 from services.Changers.ch_SensitivityEtalonByMaterial import (
     SensitivityEtalonByMaterial,
 )
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
-DB_DSN = "host=localhost port=5432 dbname=victor user=postgres password=admin"
+DB_DSN = "host=localhost port=5435 dbname=vic user=postgres password=1"
 
 
 def create_pipeline(repos: PostgresDataBase) -> PipeLine:
@@ -43,6 +46,7 @@ def create_pipeline(repos: PostgresDataBase) -> PipeLine:
     pipe_line.addChanger(ControlSensitivityChanger(), 0)
     pipe_line.addChanger(RengenApparatusForPanoramicScheme(repos), 0)
     pipe_line.addChanger(RengenDistanceForDoubleWallScheme(), 0)
+    pipe_line.addChanger(RengenDistanceForEllipseFrontalScheme(), 0)
     pipe_line.addChanger(SensitivityEtalonByMaterial(repos), 0)
     pipe_line.addChanger(ControlledZoneWidthStub(), 0)
     return pipe_line

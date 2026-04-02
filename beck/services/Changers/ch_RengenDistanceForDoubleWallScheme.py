@@ -18,6 +18,8 @@ from services.Changers.ch_RengenApparatusForPanoramicScheme import (
     _parse_decimal,
     _parse_focal_spot_max,
     _set_distance_placeholder,
+    is_ellipse_frontal_scheme_value,
+    scheme_selection_label,
 )
 from services.Interfaces.i_dataChanger import IDataChanger
 from services.tech_card import TechCardData
@@ -45,8 +47,7 @@ def _parse_quality(value) -> str | None:
     return normalized if normalized in QUALITY_TO_S_FACTOR else None
 
 
-def _is_target_scheme(value) -> bool:
-    normalized = _normalize_text(value)
+def _is_target_scheme_normalized(normalized: str) -> bool:
     if not normalized:
         return False
     if normalized == _normalize_text(TARGET_SCHEME):
@@ -81,7 +82,11 @@ class RengenDistanceForDoubleWallScheme(IDataChanger[TechCardData]):
             _SCHEME_PARAM_FRAGMENTS,
             BLOCK_SOURCE,
         )
-        if not _is_target_scheme(scheme_value):
+        # Название 7.3 содержит те же фрагменты, что и 7.2 — обрабатывает ellipse-changer.
+        if is_ellipse_frontal_scheme_value(scheme_value):
+            return data
+        scheme_label = scheme_selection_label(scheme_value)
+        if not _is_target_scheme_normalized(_normalize_text(scheme_label)):
             return data
 
         outer_diameter = _parse_decimal(
