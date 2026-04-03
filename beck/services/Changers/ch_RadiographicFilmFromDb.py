@@ -57,21 +57,25 @@ def _class_range_for_xray(quality: str, thickness_mm: float) -> Optional[Tuple[i
     return (1, 3)
 
 
-def _value_matches_expected(current_value, expected_names: list[str]) -> bool:
-    if len(expected_names) == 1:
-        expected = expected_names[0]
-        if isinstance(current_value, str):
-            return current_value.strip() == expected
-        if isinstance(current_value, (list, tuple)) and len(current_value) == 1:
-            return str(current_value[0]).strip() == expected
+def _value_satisfies_expected(current_value, expected_names: list[str]) -> bool:
+    expected_set = {name.strip() for name in expected_names if str(name).strip()}
+    if not expected_set:
         return False
 
-    expected_set = {name.strip() for name in expected_names if str(name).strip()}
+    if current_value is None:
+        return False
+
+    if isinstance(current_value, str):
+        text = current_value.strip()
+        if not text:
+            return False
+        return text in expected_set
+
     if isinstance(current_value, (list, tuple)):
-        current_set = {
-            str(item).strip() for item in current_value if str(item).strip()
-        }
-        return current_set == expected_set
+        # Для этого поля массив трактуем как "конкретный выбор не сделан".
+        # В таком случае нужно перезаписать рассчитанным значением.
+        return False
+
     return False
     
 
@@ -111,6 +115,7 @@ class RadiographicFilmFromDb(IDataChanger[TechCardData]):
         )
         if not films:
             data.set_param_value(BLOCK_SOURCE, PARAM_FILM, None)
+            data.update_param(BLOCK_SOURCE, PARAM_FILM, {"options": []})
             return data
 
         names = []
@@ -122,10 +127,13 @@ class RadiographicFilmFromDb(IDataChanger[TechCardData]):
                 names.append(film_name)
         if not names:
             data.set_param_value(BLOCK_SOURCE, PARAM_FILM, None)
+            data.update_param(BLOCK_SOURCE, PARAM_FILM, {"options": []})
             return data
 
+        data.update_param(BLOCK_SOURCE, PARAM_FILM, {"options": names})
+
         current_value = data.get_param_value(BLOCK_SOURCE, PARAM_FILM)
-        if _value_matches_expected(current_value, names):
+        if _value_satisfies_expected(current_value, names):
             return data
 
         if len(names) == 1:
