@@ -27,6 +27,7 @@ from services.Changers.ch_RengenDistanceForEllipseFrontalScheme import (
 from services.Changers.ch_SensitivityEtalonByMaterial import (
     SensitivityEtalonByMaterial,
 )
+from services.Changers.ch_RadiographicFilmFromDb import RadiographicFilmFromDb
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
@@ -48,6 +49,7 @@ def create_pipeline(repos: PostgresDataBase) -> PipeLine:
     pipe_line.addChanger(RengenDistanceForDoubleWallScheme(), 0)
     pipe_line.addChanger(RengenDistanceForEllipseFrontalScheme(), 0)
     pipe_line.addChanger(SensitivityEtalonByMaterial(repos), 0)
+    pipe_line.addChanger(RadiographicFilmFromDb(repos), 0)
     pipe_line.addChanger(ControlledZoneWidthStub(), 0)
     return pipe_line
 

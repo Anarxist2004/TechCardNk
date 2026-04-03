@@ -9,6 +9,7 @@ from repositories.Interfaces.i_cheme_control_db import IChemeControlDB
 from repositories.Interfaces.i_materials_db import IMaterialsDB
 from repositories.Interfaces.i_material_standard_db import IMaterialStandardDB
 from repositories.Interfaces.i_rengen_apparatus_db import IRengenApparatusDB
+from repositories.Interfaces.i_radiographic_film_db import IRadiographicFilmDB
 from services.tech_card import TechCardData
 from typing import Any, Dict, List, Optional, Union
 import psycopg2
@@ -25,6 +26,7 @@ class PostgresDataBase(
     IMaterialsDB,
     IMaterialStandardDB,
     IRengenApparatusDB,
+    IRadiographicFilmDB,
 ):
 
     def __init__(self, dsn: str):
@@ -369,4 +371,38 @@ class PostgresDataBase(
             return dict(row) if row else None
         except psycopg2.Error as e:
             print("get_rengen_apparatus_by_name_or_id:", e)
+            return None
+
+    def get_radiographic_films(self) -> List[Dict[str, Any]]:
+        if not self.cursor:
+            return []
+        try:
+            self.cursor.execute(
+                "SELECT id, film_class, name FROM public.radiographic_film ORDER BY id"
+            )
+            rows = self.cursor.fetchall()
+            return [dict(r) for r in rows]
+        except psycopg2.Error as e:
+            print("get_radiographic_films:", e)
+            return []
+
+    def get_radiographic_film_by_class_range(
+        self, min_class: int, max_class: int
+    ) -> Optional[Dict[str, Any]]:
+        if not self.cursor:
+            return None
+        try:
+            self.cursor.execute(
+                "SELECT id, film_class, name "
+                "FROM public.radiographic_film "
+                "WHERE film_class IS NOT NULL "
+                "AND film_class >= %s AND film_class <= %s "
+                "ORDER BY film_class, id "
+                "LIMIT 1",
+                (min_class, max_class),
+            )
+            row = self.cursor.fetchone()
+            return dict(row) if row else None
+        except psycopg2.Error as e:
+            print("get_radiographic_film_by_class_range:", e)
             return None
