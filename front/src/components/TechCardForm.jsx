@@ -620,7 +620,6 @@ const getTypeHint = (typeData) => {
 };
 
 const TableRowInput = ({
-  paramKey,
   paramName,
   value,
   value2 = '',
@@ -786,7 +785,6 @@ const TableRowInput = ({
           className="py-2 px-2 text-white text-sm align-top"
           style={{ width: '300px', minWidth: '300px', maxWidth: '300px' }}
         >
-          <span className="text-[#D97B54] font-mono mr-2">{paramKey}</span>
           {paramName}
           {typeHint && <span className="ml-1 text-xs text-[#646C89]">({typeHint})</span>}
         </td>
@@ -800,9 +798,6 @@ const TableRowInput = ({
         }}
       >
         <div className={isNumberOnlyMode ? 'flex items-start gap-3 w-full' : ''}>
-          {isNumberOnlyMode && (
-            <span className="text-[#D97B54] font-mono text-sm shrink-0 pt-1">{paramKey}</span>
-          )}
           <div
             ref={dropdownAnchorRef}
             className={isNumberOnlyMode ? 'relative flex-1 min-w-0' : hasVal2 ? 'relative w-full min-w-0' : 'relative'}
@@ -811,7 +806,6 @@ const TableRowInput = ({
               <div className="w-full space-y-1">
                 <div className="flex flex-row items-end gap-2 w-full">
                   <div className="flex-1 min-w-0">
-                    <span className="text-[10px] text-[#646C89] block mb-0.5">val</span>
                     <div className="relative">
                       <textarea
                         ref={textareaRef}
@@ -860,7 +854,6 @@ const TableRowInput = ({
                   </div>
                   <span className="text-[#646C89] shrink-0 select-none pb-2" aria-hidden>–</span>
                   <div className="relative flex-1 min-w-0">
-                    <span className="text-[10px] text-[#646C89] block mb-0.5">val2</span>
                     <textarea
                       ref={textarea2Ref}
                       value={value2}
@@ -981,7 +974,7 @@ const TableRowInput = ({
   );
 };
 
-const ReadOnlyTableRow = ({ compositeKey, param, value }) => {
+const ReadOnlyTableRow = ({ param, value }) => {
   if (isSectionHeaderParam(param)) {
     return (
       <tr className="border-b border-[#646C89]/20 bg-[#646C89]/10">
@@ -1001,7 +994,6 @@ const ReadOnlyTableRow = ({ compositeKey, param, value }) => {
           className="py-2 px-2 text-white text-sm align-top"
           style={{ width: '300px', minWidth: '300px', maxWidth: '300px' }}
         >
-          <span className="text-[#D97B54] font-mono mr-2">{compositeKey}</span>
           {param.name}
         </td>
       )}
@@ -1010,12 +1002,7 @@ const ReadOnlyTableRow = ({ compositeKey, param, value }) => {
         className="py-2 px-2 align-top"
         style={isNumberOnlyMode ? undefined : { width: '400px', minWidth: '400px' }}
       >
-        <div className={isNumberOnlyMode ? 'flex items-start gap-3 w-full' : 'whitespace-pre-wrap text-sm text-white'}>
-          {isNumberOnlyMode && (
-            <span className="text-[#D97B54] font-mono text-sm shrink-0">{compositeKey}</span>
-          )}
-          <div className="whitespace-pre-wrap text-sm text-white">{value || '-'}</div>
-        </div>
+        <div className="whitespace-pre-wrap text-sm text-white">{value || '-'}</div>
       </td>
     </tr>
   );
@@ -1979,7 +1966,6 @@ const TechCardForm = () => {
                                       <td colSpan={2} className="py-4 px-2">
                                         {!isFullImageMode && (
                                           <div className="text-white text-sm mb-2">
-                                            <span className="text-[#D97B54] font-mono mr-2">{compositeKey}</span>
                                             {param.name}
                                           </div>
                                         )}
@@ -2004,7 +1990,6 @@ const TechCardForm = () => {
                                     <React.Fragment key={compositeKey}>
                                       {imageRow}
                                       <TableRowInput
-                                        paramKey={compositeKey}
                                         paramName={param.name}
                                         value={paramValues[compositeKey] ?? ''}
                                         value2={param.hasVal2 ? (paramValues2[compositeKey] ?? '') : ''}
@@ -2030,7 +2015,6 @@ const TechCardForm = () => {
                                   return (
                                     <ReadOnlyTableRow
                                       key={compositeKey}
-                                      compositeKey={compositeKey}
                                       param={param}
                                       value={getReadOnlyParamDisplay(param, compositeKey, paramValues, paramValues2)}
                                     />
@@ -2040,7 +2024,6 @@ const TechCardForm = () => {
                                 return (
                                   <TableRowInput
                                     key={compositeKey}
-                                    paramKey={compositeKey}
                                     paramName={param.name}
                                     value={paramValues[compositeKey] ?? ''}
                                     value2={param.hasVal2 ? (paramValues2[compositeKey] ?? '') : ''}

@@ -17,6 +17,95 @@ const escapeHtml = (value = '') => String(value)
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
+/**
+ * Word: растр перед вставкой умеренно вписываем в рамку (см. prepareExportImages),
+ * чтобы таблица не разъезжалась; размеры мягче, чем «жёсткие» 260×380 px.
+ */
+const EXPORT_IMG_DIAGRAM = { maxW: 420, maxH: 560 };
+const EXPORT_IMG_GENERIC = { maxW: 900, maxH: 1200 };
+const EXPORT_IMG_EXTRA = { maxW: 520, maxH: 700 };
+
+const WORD_IMG_TABLE_CELL = 'width:100%;max-width:100%;height:auto;max-height:95mm;object-fit:contain;display:block;margin:0 auto;mso-width-percent:1000;';
+const WORD_IMG_TABLE_CELL_FULL = 'width:100%;max-width:100%;height:auto;max-height:130mm;object-fit:contain;display:block;margin:0 auto;mso-width-percent:1000;';
+const WORD_IMG_EXTRA = 'width:100%;max-width:100%;height:auto;max-height:60mm;object-fit:contain;display:block;margin:0 auto;mso-width-percent:1000;';
+const WORD_DIAGRAM_IMG_STYLE = 'width:100%;max-width:100%;height:auto;max-height:68mm;object-fit:contain;display:block;margin:0 auto;mso-width-percent:1000;';
+
+/** Колонка со схемой — ровно 2/5 ширины таблицы; остальные колонки добирают 100%. */
+const OFF_B2_DIAGRAM_COL_PCT = 40;
+const OFF_B2_SIDE_COL_PCT = 12;
+/** 4 колонки: бок | наименование | значение | схема (12 + 33 + 15 + 40 = 100). */
+const OFF_B2_NAME_4COL_PCT = 33;
+const OFF_B2_VAL_4COL_PCT = 15;
+/** 3 колонки «объект контроля»: бок | наименование | значение (без схемы), сумма 100%. */
+const OFF_B2_NAME_OC_PCT = 62;
+const OFF_B2_VAL_OC_PCT = 26;
+/** 3 колонки зоны диаграммы: наименование | значение | схема. */
+const OFF_B2_NAME_DZ_PCT = 35;
+const OFF_B2_VAL_DZ_PCT = 25;
+
+const OFF_B3_DIAGRAM_COL_PCT = 40;
+const OFF_B3_PNAME_PCT = 38;
+const OFF_B3_PVAL_PCT = 22;
+
+/** Атрибуты ячейки со схемой для Word (фиксированная доля таблицы). */
+const offB2DiagramTdAttrs = () => ` width="${OFF_B2_DIAGRAM_COL_PCT}%" style="width:${OFF_B2_DIAGRAM_COL_PCT}%;max-width:${OFF_B2_DIAGRAM_COL_PCT}%;overflow:hidden;vertical-align:top;"`;
+
+const offB3DiagramTdAttrs = () => ` width="${OFF_B3_DIAGRAM_COL_PCT}%" style="width:${OFF_B3_DIAGRAM_COL_PCT}%;max-width:${OFF_B3_DIAGRAM_COL_PCT}%;overflow:hidden;vertical-align:top;"`;
+
+const OFF_B2_DIAGRAM_SPACER_PCT = 100 - OFF_B2_SIDE_COL_PCT - OFF_B2_DIAGRAM_COL_PCT;
+
+const wordImg = (src, alt, style, opts = {}) => {
+  const safeSrc = escapeHtml(String(src || ''));
+  const safeAlt = escapeHtml(alt || '');
+  const { widthPx, heightPx } = opts;
+  const dimAttr = widthPx != null && heightPx != null
+    ? ` width="${widthPx}" height="${heightPx}"`
+    : widthPx != null
+      ? ` width="${widthPx}"`
+      : '';
+  return `<img src="${safeSrc}" alt="${safeAlt}"${dimAttr} style="${style}" />`;
+};
+
+const buildDiagramImgStyle = (w, h) => (
+  `width:${w}px;max-width:100%;height:${h}px;max-height:100%;object-fit:contain;display:block;margin:0 auto;mso-width-percent:1000;`
+);
+
+const wordDiagramWrapB2 = (src, size) => {
+  if (size?.w != null && size?.h != null) {
+    const { w, h } = size;
+    return `
+  <div class="off-diagram-wrap" style="width:100%;max-width:100%;overflow:hidden;text-align:center;line-height:0;">
+    ${wordImg(src, '', buildDiagramImgStyle(w, h), { widthPx: w, heightPx: h })}
+  </div>`;
+  }
+  return `
+  <div class="off-diagram-wrap" style="width:100%;max-width:100%;overflow:hidden;text-align:center;line-height:0;">
+    ${wordImg(src, '', WORD_DIAGRAM_IMG_STYLE)}
+  </div>`;
+};
+
+const wordDiagramWrapB3 = (src, caption, size) => {
+  if (size?.w != null && size?.h != null) {
+    const { w, h } = size;
+    return `
+  <div class="off-diagram-wrap off-b3-img" style="width:100%;max-width:100%;overflow:hidden;text-align:center;line-height:0;">
+    ${wordImg(src, caption, buildDiagramImgStyle(w, h), { widthPx: w, heightPx: h })}
+  </div>`;
+  }
+  return `
+  <div class="off-diagram-wrap off-b3-img" style="width:100%;max-width:100%;overflow:hidden;text-align:center;line-height:0;">
+    ${wordImg(src, caption, WORD_DIAGRAM_IMG_STYLE)}
+  </div>`;
+};
+
+const wordImgWithMeta = (src, alt, baseStyle, meta) => {
+  if (meta && meta.w != null && meta.h != null) {
+    const style = `${baseStyle};width:${meta.w}px;max-width:100%;height:${meta.h}px;max-height:100%;object-fit:contain;display:block;margin:0 auto;mso-width-percent:1000;`;
+    return wordImg(src, alt, style, { widthPx: meta.w, heightPx: meta.h });
+  }
+  return wordImg(src, alt, baseStyle);
+};
+
 const resolveImageSrc = (imageSrc) => {
   if (!imageSrc) {
     return '';
@@ -295,12 +384,88 @@ const embedImageSource = async (imageSrc, cache) => {
   }
 };
 
+const downscaleDataUrlToFitBox = (dataUrl, maxW, maxH) => new Promise((resolve) => {
+  if (
+    typeof document === 'undefined'
+    || !dataUrl
+    || typeof dataUrl !== 'string'
+    || !dataUrl.startsWith('data:')
+  ) {
+    resolve({ dataUrl, width: null, height: null });
+    return;
+  }
+
+  const img = new Image();
+  img.onload = () => {
+    const w0 = img.naturalWidth || img.width;
+    const h0 = img.naturalHeight || img.height;
+    if (!w0 || !h0) {
+      resolve({ dataUrl, width: null, height: null });
+      return;
+    }
+
+    const scale = Math.min(maxW / w0, maxH / h0, 1);
+    const w = Math.max(1, Math.round(w0 * scale));
+    const h = Math.max(1, Math.round(h0 * scale));
+
+    if (scale >= 1) {
+      resolve({ dataUrl, width: w0, height: h0 });
+      return;
+    }
+
+    let canvas;
+    try {
+      canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+    } catch {
+      resolve({ dataUrl, width: w0, height: h0 });
+      return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      resolve({ dataUrl, width: w0, height: h0 });
+      return;
+    }
+
+    try {
+      ctx.drawImage(img, 0, 0, w, h);
+      const out = canvas.toDataURL('image/png');
+      resolve({ dataUrl: out || dataUrl, width: w, height: h });
+    } catch {
+      resolve({ dataUrl, width: w0, height: h0 });
+    }
+  };
+  img.onerror = () => resolve({ dataUrl, width: null, height: null });
+  img.src = dataUrl;
+});
+
+const processDataUrlForWordExport = async (dataUrl, { maxW, maxH }) => {
+  if (!dataUrl || typeof dataUrl !== 'string') {
+    return { dataUrl: '', width: undefined, height: undefined };
+  }
+  if (!dataUrl.startsWith('data:')) {
+    return { dataUrl, width: undefined, height: undefined };
+  }
+  const { dataUrl: out, width, height } = await downscaleDataUrlToFitBox(dataUrl, maxW, maxH);
+  return {
+    dataUrl: out,
+    width: width ?? undefined,
+    height: height ?? undefined,
+  };
+};
+
 const prepareExportImages = async (blocks, uploadedImages) => {
   const cache = new Map();
   const blockImages = {};
+  const blockImageMeta = {};
   const extraImages = {};
 
   for (const block of blocks) {
+    const bid = String(block.id);
+    const box = (bid === '2' || bid === '3') ? EXPORT_IMG_DIAGRAM : EXPORT_IMG_GENERIC;
+
     for (const param of block.params || []) {
       const compositeKey = `${block.id}.${param.id}`;
       const imageSrc = getParamImageSrc(param);
@@ -308,7 +473,12 @@ const prepareExportImages = async (blocks, uploadedImages) => {
         continue;
       }
 
-      blockImages[compositeKey] = await embedImageSource(imageSrc, cache);
+      const embedded = await embedImageSource(imageSrc, cache);
+      const processed = await processDataUrlForWordExport(embedded, box);
+      blockImages[compositeKey] = processed.dataUrl;
+      if (processed.width != null && processed.height != null) {
+        blockImageMeta[compositeKey] = { w: processed.width, h: processed.height };
+      }
     }
   }
 
@@ -320,15 +490,22 @@ const prepareExportImages = async (blocks, uploadedImages) => {
     extraImages[blockId] = await Promise.all(
       images
         .filter((image) => image && image.preview)
-        .map(async (image) => ({
-          ...image,
-          exportSrc: await embedImageSource(image.preview, cache),
-        })),
+        .map(async (image) => {
+          const embedded = await embedImageSource(image.preview, cache);
+          const processed = await processDataUrlForWordExport(embedded, EXPORT_IMG_EXTRA);
+          return {
+            ...image,
+            exportSrc: processed.dataUrl,
+            exportW: processed.width,
+            exportH: processed.height,
+          };
+        }),
     );
   }
 
   return {
     blockImages,
+    blockImageMeta,
     extraImages,
   };
 };
@@ -401,6 +578,7 @@ const buildOfficialBlock2GroupedHtml = (
   paramValues2,
   params,
   imageParams,
+  imageMetaMap = {},
 ) => {
   const blockId = block.id;
   const leftRows = [];
@@ -429,9 +607,11 @@ const buildOfficialBlock2GroupedHtml = (
   const diagramImageParam = imageParams.find(
     (p) => isBlock2DiagramZoneSubtitle(p.subtitle),
   ) || imageParams[0];
+  const diagramKey = diagramImageParam ? `${blockId}.${diagramImageParam.id}` : '';
   const diagramSrc = diagramImageParam
-    ? (imageSrcMap[`${blockId}.${diagramImageParam.id}`] || '')
+    ? (imageSrcMap[diagramKey] || '')
     : '';
+  const diagramSize = diagramKey ? imageMetaMap[diagramKey] : undefined;
 
   const countRowsInGroup = (g) => g.rows.length;
 
@@ -448,11 +628,12 @@ const buildOfficialBlock2GroupedHtml = (
 
   if (totalRows === 0 && diagramSrc) {
     return `
-      <table class="official-table official-b2" width="100%" border="1">
+      <table class="official-table official-b2 official-b2-grouped" width="100%" border="1">
         <tr>
           <td class="off-b2-side">${sideLabel}</td>
-          <td class="off-b2-diagram" colspan="2" align="center">
-            <div class="off-diagram-wrap"><img src="${diagramSrc}" alt="" /></div>
+          <td class="off-b2-diagram-spacer">&#160;</td>
+          <td class="off-b2-diagram" align="center"${offB2DiagramTdAttrs()}>
+            ${wordDiagramWrapB2(diagramSrc, diagramSize)}
           </td>
         </tr>
       </table>`;
@@ -475,7 +656,7 @@ const buildOfficialBlock2GroupedHtml = (
           trs.push(`
         <tr>
           ${sideCell}
-          <td class="off-b2-section" colspan="2">${escapeHtml(row.title)}</td>
+          <td class="off-b2-section off-b2-section-oc" colspan="2">${escapeHtml(row.title)}</td>
         </tr>`);
         } else {
           const p = row.param;
@@ -488,8 +669,8 @@ const buildOfficialBlock2GroupedHtml = (
           trs.push(`
         <tr>
           ${sideCell}
-          <td class="off-b2-name">${escapeHtml(p.name || '')}</td>
-          <td class="off-b2-val" align="center">${escapeHtml(val || '')}</td>
+          <td class="off-b2-name off-b2-name-oc">${escapeHtml(p.name || '')}</td>
+          <td class="off-b2-val off-b2-val-oc" align="center">${escapeHtml(val || '')}</td>
         </tr>`);
         }
       }
@@ -530,8 +711,8 @@ const buildOfficialBlock2GroupedHtml = (
       );
 
       const diagramTd = diagramSrc
-        ? `<td class="off-b2-diagram" rowspan="${zoneRowCount}" align="center" valign="top">
-        <div class="off-diagram-wrap"><img src="${diagramSrc}" alt="" /></div>
+        ? `<td class="off-b2-diagram" rowspan="${zoneRowCount}" align="center" valign="top"${offB2DiagramTdAttrs()}>
+        ${wordDiagramWrapB2(diagramSrc, diagramSize)}
       </td>`
         : '';
 
@@ -543,7 +724,7 @@ const buildOfficialBlock2GroupedHtml = (
             if (row.kind === 'section') {
               trs.push(`
         <tr>
-          <td class="off-b2-section" colspan="2">${escapeHtml(row.title)}</td>
+          <td class="off-b2-section off-b2-section-dz" colspan="2">${escapeHtml(row.title)}</td>
           ${firstPhysical ? diagramTd : ''}
         </tr>`);
             } else {
@@ -552,15 +733,15 @@ const buildOfficialBlock2GroupedHtml = (
               const val = getParamExportCellText(p, key, paramValues, paramValues2);
               trs.push(`
         <tr>
-          <td class="off-b2-name">${escapeHtml(p.name || '')}</td>
-          <td class="off-b2-val" align="center">${escapeHtml(val || '')}</td>
+          <td class="off-b2-name off-b2-name-dz">${escapeHtml(p.name || '')}</td>
+          <td class="off-b2-val off-b2-val-dz" align="center">${escapeHtml(val || '')}</td>
           ${firstPhysical ? diagramTd : ''}
         </tr>`);
             }
           } else if (row.kind === 'section') {
             trs.push(`
         <tr>
-          <td class="off-b2-section" colspan="3">${escapeHtml(row.title)}</td>
+          <td class="off-b2-section off-b2-section-full" colspan="3">${escapeHtml(row.title)}</td>
         </tr>`);
           } else {
             const p = row.param;
@@ -568,8 +749,8 @@ const buildOfficialBlock2GroupedHtml = (
             const val = getParamExportCellText(p, key, paramValues, paramValues2);
             trs.push(`
         <tr>
-          <td class="off-b2-name">${escapeHtml(p.name || '')}</td>
-          <td class="off-b2-val" align="center" colspan="2">${escapeHtml(val || '')}</td>
+          <td class="off-b2-name off-b2-name-dz">${escapeHtml(p.name || '')}</td>
+          <td class="off-b2-val off-b2-val-wide" align="center" colspan="2">${escapeHtml(val || '')}</td>
         </tr>`);
           }
           firstPhysical = false;
@@ -583,7 +764,7 @@ const buildOfficialBlock2GroupedHtml = (
       if (row.kind === 'section') {
         trs.push(`
         <tr>
-          <td class="off-b2-section" colspan="3">${escapeHtml(row.title)}</td>
+          <td class="off-b2-section off-b2-section-full" colspan="3">${escapeHtml(row.title)}</td>
         </tr>`);
       } else {
         const p = row.param;
@@ -591,8 +772,8 @@ const buildOfficialBlock2GroupedHtml = (
         const val = getParamExportCellText(p, key, paramValues, paramValues2);
         trs.push(`
         <tr>
-          <td class="off-b2-name">${escapeHtml(p.name || '')}</td>
-          <td class="off-b2-val" align="center" colspan="2">${escapeHtml(val || '')}</td>
+          <td class="off-b2-name off-b2-name-dz">${escapeHtml(p.name || '')}</td>
+          <td class="off-b2-val off-b2-val-wide" align="center" colspan="2">${escapeHtml(val || '')}</td>
         </tr>`);
       }
     }
@@ -609,12 +790,14 @@ const buildOfficialBlock2GroupedHtml = (
  * Блок «Объект контроля»: без subtitle — схема справа на всю высоту текстовой части;
  * с subtitle — см. buildOfficialBlock2GroupedHtml.
  */
-const buildOfficialBlock2Html = (block, paramValues, imageSrcMap, paramValues2 = {}) => {
+const buildOfficialBlock2Html = (block, paramValues, imageSrcMap, paramValues2 = {}, imageMetaMap = {}) => {
   const params = (block.params || []).filter((p) => !isOperationsRowParam(p));
   const imageParams = params.filter((p) => paramHasImage(p, `${block.id}.${p.id}`, imageSrcMap));
+  const diagramKey = imageParams.length > 0 ? `${block.id}.${imageParams[0].id}` : '';
   const diagramSrc = imageParams.length > 0
-    ? (imageSrcMap[`${block.id}.${imageParams[0].id}`] || '')
+    ? (imageSrcMap[diagramKey] || '')
     : '';
+  const diagramSize = diagramKey ? imageMetaMap[diagramKey] : undefined;
 
   if (block2SubtitleModeEnabled(params)) {
     return buildOfficialBlock2GroupedHtml(
@@ -624,6 +807,7 @@ const buildOfficialBlock2Html = (block, paramValues, imageSrcMap, paramValues2 =
       paramValues2,
       params,
       imageParams,
+      imageMetaMap,
     );
   }
 
@@ -651,19 +835,20 @@ const buildOfficialBlock2Html = (block, paramValues, imageSrcMap, paramValues2 =
 
   if (leftRows.length === 0 && diagramSrc) {
     return `
-      <table class="official-table official-b2" width="100%" border="1">
+      <table class="official-table official-b2 official-b2-grouped" width="100%" border="1">
         <tr>
           <td class="off-b2-side">${sideLabel}</td>
-          <td class="off-b2-diagram" colspan="2" align="center">
-            <div class="off-diagram-wrap"><img src="${diagramSrc}" alt="" /></div>
+          <td class="off-b2-diagram-spacer">&#160;</td>
+          <td class="off-b2-diagram" align="center"${offB2DiagramTdAttrs()}>
+            ${wordDiagramWrapB2(diagramSrc, diagramSize)}
           </td>
         </tr>
       </table>`;
   }
 
   const diagramCell = diagramSrc
-    ? `<td class="off-b2-diagram" rowspan="${rowspanMain}" align="center" valign="top">
-        <div class="off-diagram-wrap"><img src="${diagramSrc}" alt="" /></div>
+    ? `<td class="off-b2-diagram" rowspan="${rowspanMain}" align="center" valign="top"${offB2DiagramTdAttrs()}>
+        ${wordDiagramWrapB2(diagramSrc, diagramSize)}
       </td>`
     : '';
 
@@ -677,7 +862,7 @@ const buildOfficialBlock2Html = (block, paramValues, imageSrcMap, paramValues2 =
       return `
         <tr>
           ${sideCell}
-          <td class="off-b2-section" colspan="2">${escapeHtml(row.title)}</td>
+          <td class="off-b2-section off-b2-section-4col" colspan="2">${escapeHtml(row.title)}</td>
           ${isFirst ? diagramCell : ''}
         </tr>`;
     }
@@ -696,6 +881,12 @@ const buildOfficialBlock2Html = (block, paramValues, imageSrcMap, paramValues2 =
 
   return `
     <table class="official-table official-b2" width="100%" border="1">
+      <colgroup>
+        <col style="width:${OFF_B2_SIDE_COL_PCT}%;" />
+        <col style="width:${OFF_B2_NAME_4COL_PCT}%;" />
+        <col style="width:${OFF_B2_VAL_4COL_PCT}%;" />
+        <col style="width:${OFF_B2_DIAGRAM_COL_PCT}%;" />
+      </colgroup>
       ${body}
     </table>`;
 };
@@ -704,25 +895,25 @@ const BLOCK3_FOOTNOTE = (
   '* Допускается использовать усиливающие экраны, поставляемые в одной упаковке с пленкой.'
 );
 
-const buildOfficialBlock3Html = (block, paramValues, imageSrcMap, paramValues2 = {}) => {
+const buildOfficialBlock3Html = (block, paramValues, imageSrcMap, paramValues2 = {}, imageMetaMap = {}) => {
   const params = (block.params || []).filter((p) => !isOperationsRowParam(p));
   const imageParams = params.filter((p) => paramHasImage(p, `${block.id}.${p.id}`, imageSrcMap));
   const textParams = params.filter((p) => !paramHasImage(p, `${block.id}.${p.id}`, imageSrcMap));
 
   const diagramParts = imageParams.map((p) => {
-    const src = imageSrcMap[`${block.id}.${p.id}`] || '';
+    const key = `${block.id}.${p.id}`;
+    const src = imageSrcMap[key] || '';
     if (!src) {
       return '';
     }
-    const caption = escapeHtml(p.name || 'Схема');
-    return `
-      <div class="off-diagram-wrap off-b3-img"><img src="${src}" alt="${caption}" /></div>`;
+    const caption = p.name || 'Схема';
+    return wordDiagramWrapB3(src, caption, imageMetaMap[key]);
   }).join('');
 
   const diagramBody = diagramParts || '&#160;';
 
   const diagramCell = `
-    <td class="off-b3-diagram" rowspan="__ROWSPAN__" align="center" valign="top">
+    <td class="off-b3-diagram" rowspan="__ROWSPAN__" align="center" valign="top"${offB3DiagramTdAttrs()}>
       ${diagramBody}
     </td>`;
 
@@ -765,6 +956,11 @@ const buildOfficialBlock3Html = (block, paramValues, imageSrcMap, paramValues2 =
 
   return `
     <table class="official-table official-b3" width="100%" border="1">
+      <colgroup>
+        <col style="width:${OFF_B3_PNAME_PCT}%;" />
+        <col style="width:${OFF_B3_PVAL_PCT}%;" />
+        <col style="width:${OFF_B3_DIAGRAM_COL_PCT}%;" />
+      </colgroup>
       ${titleRow}
       ${subHeadRow}
       ${dataRows}
@@ -773,7 +969,7 @@ const buildOfficialBlock3Html = (block, paramValues, imageSrcMap, paramValues2 =
 };
 
 const buildParamRowHtml = (blockId, param, paramValues, imageSrcMap, paramValues2 = {}, options = {}) => {
-  const { operationsGost = false } = options;
+  const { operationsGost = false, imageMetaMap = {} } = options;
   const compositeKey = `${blockId}.${param.id}`;
   const paramNumber = `${blockId}.${param.id}`;
   const imageSrc = imageSrcMap[compositeKey] || '';
@@ -847,7 +1043,7 @@ const buildParamRowHtml = (blockId, param, paramValues, imageSrcMap, paramValues
         <tr class="image-row image-row-full">
           <td colspan="3">
             <div class="image-wrapper image-wrapper-full">
-              <img src="${imageSrc}" alt="${caption}" />
+              ${wordImgWithMeta(imageSrc, param.name || paramNumber, WORD_IMG_TABLE_CELL_FULL, imageMetaMap[compositeKey])}
             </div>
           </td>
         </tr>
@@ -860,7 +1056,7 @@ const buildParamRowHtml = (blockId, param, paramValues, imageSrcMap, paramValues
         <td colspan="3">
           <div class="image-wrapper">
             <div class="image-caption">${caption}</div>
-            <img src="${imageSrc}" alt="${caption}" />
+            ${wordImgWithMeta(imageSrc, param.name || paramNumber, WORD_IMG_TABLE_CELL, imageMetaMap[compositeKey])}
           </div>
         </td>
       </tr>`;
@@ -872,7 +1068,7 @@ const buildParamRowHtml = (blockId, param, paramValues, imageSrcMap, paramValues
         <td colspan="2">
           <div class="image-wrapper">
             <div class="image-caption">${caption}</div>
-            <img src="${imageSrc}" alt="${caption}" />
+            ${wordImgWithMeta(imageSrc, param.name || paramNumber, WORD_IMG_TABLE_CELL, imageMetaMap[compositeKey])}
           </div>
         </td>
       </tr>
@@ -1050,12 +1246,16 @@ const buildUploadedImagesHtml = (images = []) => {
     return '';
   }
 
-  const cards = normalizedImages.map((image) => `
+  const cards = normalizedImages.map((image) => {
+    const meta = image.exportW != null && image.exportH != null
+      ? { w: image.exportW, h: image.exportH }
+      : undefined;
+    return `
     <figure class="extra-image-card">
-      <img src="${image.exportSrc || resolveImageSrc(image.preview)}" alt="${escapeHtml(image.name || 'Изображение')}" />
+      ${wordImgWithMeta(image.exportSrc || resolveImageSrc(image.preview), image.name || 'Изображение', WORD_IMG_EXTRA, meta)}
       <figcaption>${escapeHtml(image.name || 'Изображение')}</figcaption>
-    </figure>
-  `).join('');
+    </figure>`;
+  }).join('');
 
   return `
     <div class="extra-images-section">
@@ -1067,9 +1267,9 @@ const buildUploadedImagesHtml = (images = []) => {
   `;
 };
 
-const buildGenericBlockHtml = (block, paramValues, customFields, uploadedImages, imageSrcMap, paramValues2 = {}) => {
+const buildGenericBlockHtml = (block, paramValues, customFields, uploadedImages, imageSrcMap, paramValues2 = {}, imageMetaMap = {}) => {
   const operationsGost = isOperationsRcBlock(block);
-  const rowOptions = { operationsGost };
+  const rowOptions = { operationsGost, imageMetaMap };
   const paramRows = (block.params || [])
     .map((param) => buildParamRowHtml(block.id, param, paramValues, imageSrcMap, paramValues2, rowOptions))
     .filter(Boolean)
@@ -1126,18 +1326,18 @@ const buildGenericBlockHtml = (block, paramValues, customFields, uploadedImages,
   `;
 };
 
-const buildBlockExportSection = (block, paramValues, customFields, uploadedImages, imageSrcMap, paramValues2 = {}) => {
+const buildBlockExportSection = (block, paramValues, customFields, uploadedImages, imageSrcMap, paramValues2 = {}, imageMetaMap = {}) => {
   const id = normalizeBlockId(block);
   if (id === '1') {
     return `<section class="techcard-block techcard-official">${buildOfficialBlock1Html(block, paramValues, imageSrcMap, paramValues2)}</section>`;
   }
   if (id === '2') {
-    return `<section class="techcard-block techcard-official">${buildOfficialBlock2Html(block, paramValues, imageSrcMap, paramValues2)}</section>`;
+    return `<section class="techcard-block techcard-official">${buildOfficialBlock2Html(block, paramValues, imageSrcMap, paramValues2, imageMetaMap)}</section>`;
   }
   if (id === '3') {
-    return `<section class="techcard-block techcard-official">${buildOfficialBlock3Html(block, paramValues, imageSrcMap, paramValues2)}</section>`;
+    return `<section class="techcard-block techcard-official">${buildOfficialBlock3Html(block, paramValues, imageSrcMap, paramValues2, imageMetaMap)}</section>`;
   }
-  return buildGenericBlockHtml(block, paramValues, customFields, uploadedImages, imageSrcMap, paramValues2);
+  return buildGenericBlockHtml(block, paramValues, customFields, uploadedImages, imageSrcMap, paramValues2, imageMetaMap);
 };
 
 const buildWordHtml = ({
@@ -1150,6 +1350,7 @@ const buildWordHtml = ({
   customFields,
   uploadedImages,
   imageSrcMap,
+  imageMetaMap = {},
   title,
 }) => {
   const metadataRows = [
@@ -1160,7 +1361,7 @@ const buildWordHtml = ({
   ].filter(Boolean).join('');
 
   const blocksHtml = blocks
-    .map((block) => buildBlockExportSection(block, paramValues, customFields, uploadedImages, imageSrcMap, paramValues2))
+    .map((block) => buildBlockExportSection(block, paramValues, customFields, uploadedImages, imageSrcMap, paramValues2, imageMetaMap))
     .join('');
   const documentTitle = escapeHtml(title || 'Технологическая карта');
 
@@ -1179,6 +1380,15 @@ const buildWordHtml = ({
       </xml>
       <![endif]-->
       <style>
+        /* Альбомная ориентация A4 для Word (HTML → .doc) */
+        @page WordSection1 {
+          size: 297mm 210mm;
+          mso-page-orientation: landscape;
+        }
+        div.WordSection1 {
+          page: WordSection1;
+          mso-page-orientation: landscape;
+        }
         * { box-sizing: border-box; }
         html, body {
           margin: 0;
@@ -1190,7 +1400,7 @@ const buildWordHtml = ({
           line-height: 1.25;
         }
         body { padding: 8mm 10mm; }
-        .page { width: 100%; max-width: 190mm; margin: 0 auto; }
+        .page { width: 100%; max-width: 277mm; margin: 0 auto; }
         .document-title {
           margin: 0 0 4mm;
           font-size: 14pt;
@@ -1235,15 +1445,26 @@ const buildWordHtml = ({
           font-weight: bold;
           text-align: center;
           vertical-align: middle;
-          width: 12%;
+          width: ${OFF_B2_SIDE_COL_PCT}%;
+          max-width: ${OFF_B2_SIDE_COL_PCT}%;
           font-size: 9pt;
           line-height: 1.15;
         }
-        .off-b2-name { width: 44%; vertical-align: top; word-wrap: break-word; }
-        .off-b2-val { width: 18%; vertical-align: top; word-wrap: break-word; }
+        .off-b2-name { width: ${OFF_B2_NAME_4COL_PCT}%; vertical-align: top; word-wrap: break-word; }
+        .off-b2-val { width: ${OFF_B2_VAL_4COL_PCT}%; vertical-align: top; word-wrap: break-word; }
+        .official-b2-grouped .off-b2-name-oc { width: ${OFF_B2_NAME_OC_PCT}%; max-width: ${OFF_B2_NAME_OC_PCT}%; }
+        .official-b2-grouped .off-b2-val-oc { width: ${OFF_B2_VAL_OC_PCT}%; max-width: ${OFF_B2_VAL_OC_PCT}%; }
+        .official-b2-grouped .off-b2-name-dz { width: ${OFF_B2_NAME_DZ_PCT}%; max-width: ${OFF_B2_NAME_DZ_PCT}%; }
+        .official-b2-grouped .off-b2-val-dz { width: ${OFF_B2_VAL_DZ_PCT}%; max-width: ${OFF_B2_VAL_DZ_PCT}%; }
+        .off-b2-diagram-spacer {
+          width: ${OFF_B2_DIAGRAM_SPACER_PCT}%;
+          max-width: ${OFF_B2_DIAGRAM_SPACER_PCT}%;
+          vertical-align: top;
+          padding: 2pt;
+        }
         .off-b2-diagram {
-          width: 26%;
-          max-width: 26%;
+          width: ${OFF_B2_DIAGRAM_COL_PCT}%;
+          max-width: ${OFF_B2_DIAGRAM_COL_PCT}%;
           vertical-align: top;
           padding: 4pt;
           overflow: hidden;
@@ -1254,13 +1475,18 @@ const buildWordHtml = ({
           text-align: center;
           background: #f0f0f0;
         }
+        .official-b2-grouped .off-b2-section-oc { width: 88%; max-width: 88%; }
+        .official-b2-grouped .off-b2-section-dz { width: 60%; max-width: 60%; }
+        .official-b2-grouped .off-b2-section-full { width: 100%; max-width: 100%; }
+        .official-b2:not(.official-b2-grouped) .off-b2-section-4col { width: 48%; max-width: 48%; }
+        .official-b2-grouped .off-b2-val-wide { width: 65%; max-width: 65%; }
         .off-b3-banner { font-size: 11pt; padding: 4pt; }
         .off-b3-subhead { padding: 3pt; background: #f0f0f0; }
-        .off-b3-pname { width: 42%; vertical-align: top; word-wrap: break-word; }
-        .off-b3-pval { width: 23%; vertical-align: top; word-wrap: break-word; }
+        .off-b3-pname { width: ${OFF_B3_PNAME_PCT}%; vertical-align: top; word-wrap: break-word; }
+        .off-b3-pval { width: ${OFF_B3_PVAL_PCT}%; vertical-align: top; word-wrap: break-word; }
         .off-b3-diagram {
-          width: 35%;
-          max-width: 35%;
+          width: ${OFF_B3_DIAGRAM_COL_PCT}%;
+          max-width: ${OFF_B3_DIAGRAM_COL_PCT}%;
           vertical-align: top;
           padding: 4pt;
           overflow: hidden;
@@ -1277,8 +1503,8 @@ const buildWordHtml = ({
         .off-diagram-wrap img {
           display: block;
           margin: 0 auto;
+          width: 100%;
           max-width: 100%;
-          width: auto;
           height: auto;
           max-height: 68mm;
           object-fit: contain;
@@ -1347,8 +1573,8 @@ const buildWordHtml = ({
         .image-wrapper img {
           display: block;
           margin: 0 auto;
+          width: 100%;
           max-width: 100%;
-          width: auto;
           height: auto;
           max-height: 95mm;
           object-fit: contain;
@@ -1394,14 +1620,16 @@ const buildWordHtml = ({
       </style>
     </head>
     <body>
-      <main class="page">
-        <h1 class="document-title">${documentTitle}</h1>
-        <section class="document-meta">
-          ${metadataRows}
-        </section>
-        ${blocksHtml}
-        <div class="export-note">Документ сформирован из текущего состояния техкарты.</div>
-      </main>
+      <div class="WordSection1">
+        <main class="page">
+          <h1 class="document-title">${documentTitle}</h1>
+          <section class="document-meta">
+            ${metadataRows}
+          </section>
+          ${blocksHtml}
+          <div class="export-note">Документ сформирован из текущего состояния техкарты.</div>
+        </main>
+      </div>
     </body>
   </html>`;
 };
@@ -1444,7 +1672,7 @@ export const exportTechCardToWord = async ({
   uploadedImages = {},
   title = 'Технологическая карта',
 }) => {
-  const { blockImages, extraImages } = await prepareExportImages(blocks, uploadedImages);
+  const { blockImages, blockImageMeta, extraImages } = await prepareExportImages(blocks, uploadedImages);
 
   const html = buildWordHtml({
     methodologyName,
@@ -1456,6 +1684,7 @@ export const exportTechCardToWord = async ({
     customFields,
     uploadedImages: extraImages,
     imageSrcMap: blockImages,
+    imageMetaMap: blockImageMeta,
     title,
   });
 
