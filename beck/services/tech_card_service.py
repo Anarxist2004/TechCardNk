@@ -66,33 +66,26 @@ class TechCardService(IServise):
         card.insert_param_to_block(
             card.get("3")["name"],
             1,
-            {
-                "name": "схема просвечивания",
-                "val": None,
-                "subtitle": "ИСХОДНЫЕ ДАННЫЕ",
-                "options": [],
-                "typeData": "string",
-                "displayMode": None,
-            },
+            {"name": "схема просвечивания", "val": None},
         )
         card.insert_param_to_block(
             card.get("3")["name"],
-            3,
+            2,
             {"name": "Радиационная толщина, мм", "val": None},
         )
         card.insert_param_to_block(
             card.get("3")["name"],
-            4,
+            3,
             {"name": "Чувствительность контроля, мм", "val": None},
         )
         card.insert_param_to_block(
             card.get("3")["name"],
-            5,
+            4,
             {"name": "Тип и номер эталона чувствительности", "val": None},
         )
         card.insert_param_to_block(
             card.get("3")["name"],
-            6,
+            5,
             {
                 "name": (
                     "Расстояние от ИИИ до поверхности "
@@ -103,17 +96,17 @@ class TechCardService(IServise):
         )
         card.insert_param_to_block(
             card.get("3")["name"],
-            7,
+            6,
             {"name": "ИИИ Рентгеновский аппарат", "val": None},
         )
         card.insert_param_to_block(
             card.get("3")["name"],
-            8,
+            7,
             {"name": "Размер фокусного пятна ИИИ, мм", "val": None},
         )
         card.insert_param_to_block(
             card.get("3")["name"],
-            9,
+            8,
             {
                 "name": "Напряжение на рентгеновской трубке, не более, кВ",
                 "val": None,
@@ -121,27 +114,27 @@ class TechCardService(IServise):
         )
         card.insert_param_to_block(
             card.get("3")["name"],
-            10,
-            {"name": "Тип радиографической пленки D-7 (AGFA)", "val": None},
+            9,
+            {"name": "Тип радиографической пленки", "val": None},
         )
         card.insert_param_to_block(
             card.get("3")["name"],
-            11,
+            10,
             {"name": "Тип и толщина усиливающего экрана, мм", "val": None},
         )
         card.insert_param_to_block(
             card.get("3")["name"],
-            12,
+            11,
             {"name": "Толщина защитного экрана, мм", "val": None},
         )
         card.insert_param_to_block(
             card.get("3")["name"],
-            13,
+            12,
             {"name": "Количество участков, шт.", "val": None},
         )
         card.insert_param_to_block(
             card.get("3")["name"],
-            14,
+            13,
             {
                 "name": "Размеры оценочного участка (ширина × длина), мм",
                 "val": None,
@@ -149,7 +142,7 @@ class TechCardService(IServise):
         )
         card.insert_param_to_block(
             card.get("3")["name"],
-            15,
+            14,
             {
                 "name": "Размеры радиографической пленки (ширина × длина), мм",
                 "val": None,

@@ -9,6 +9,7 @@ from repositories.Interfaces.i_cheme_control_db import IChemeControlDB
 from repositories.Interfaces.i_materials_db import IMaterialsDB
 from repositories.Interfaces.i_material_standard_db import IMaterialStandardDB
 from repositories.Interfaces.i_rengen_apparatus_db import IRengenApparatusDB
+from repositories.Interfaces.i_radiographic_film_db import IRadiographicFilmDB
 from services.tech_card import TechCardData
 from typing import Any, Dict, List, Optional, Union
 import psycopg2
@@ -25,6 +26,7 @@ class PostgresDataBase(
     IMaterialsDB,
     IMaterialStandardDB,
     IRengenApparatusDB,
+    IRadiographicFilmDB
 ):
 
     def __init__(self, dsn: str):
@@ -370,3 +372,30 @@ class PostgresDataBase(
         except psycopg2.Error as e:
             print("get_rengen_apparatus_by_name_or_id:", e)
             return None
+
+    def get_films_by_classes(self, film_classes: List[int]) -> List[Dict[str, Any]]:
+        """Получить плёнки по списку классов."""
+        if not self.cursor:
+            return []
+        
+        if not film_classes:
+            return []
+        
+        try:
+            # Используем ANY для работы со списком классов
+            self.cursor.execute(
+                """
+                SELECT id, film_class, name
+                FROM public.radiographic_film
+                WHERE film_class = ANY(%s)
+                ORDER BY film_class, id
+                """,
+                (film_classes,),
+            )
+
+            rows = self.cursor.fetchall()
+            # При использовании RealDictCursor строки уже являются dict
+            return [dict(r) for r in rows]
+        except psycopg2.Error as e:
+            print("get_films_by_classes:", e)
+            return []

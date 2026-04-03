@@ -15,18 +15,12 @@ from services.Changers.ch_ControlledZoneWidthStub import ControlledZoneWidthStub
 from services.Changers.ch_ControlSensitivity import ControlSensitivityChanger
 from services.Changers.ch_MaterialsFromDb import MaterialsFromDb
 from services.Changers.ch_RengenApparatusFromDb import RengenApparatusFromDb
-from services.Changers.ch_RengenApparatusForPanoramicScheme import (
-    RengenApparatusForPanoramicScheme,
-)
-from services.Changers.ch_RengenDistanceForDoubleWallScheme import (
-    RengenDistanceForDoubleWallScheme,
-)
-from services.Changers.ch_RengenDistanceForEllipseFrontalScheme import (
-    RengenDistanceForEllipseFrontalScheme,
-)
-from services.Changers.ch_SensitivityEtalonByMaterial import (
-    SensitivityEtalonByMaterial,
-)
+from services.Changers.ch_RengenApparatusForPanoramicScheme import RengenApparatusForPanoramicScheme
+from services.Changers.ch_RengenDistanceForDoubleWallScheme import RengenDistanceForDoubleWallScheme
+from services.Changers.ch_RengenDistanceForEllipseFrontalScheme import RengenDistanceForEllipseFrontalScheme
+from services.Changers.ch_SensitivityEtalonByMaterial import SensitivityEtalonByMaterial
+from services.Changers.ch_getRadiograficFilm import getRadiograficFilm
+
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
@@ -49,6 +43,7 @@ def create_pipeline(repos: PostgresDataBase) -> PipeLine:
     pipe_line.addChanger(RengenDistanceForEllipseFrontalScheme(), 0)
     pipe_line.addChanger(SensitivityEtalonByMaterial(repos), 0)
     pipe_line.addChanger(ControlledZoneWidthStub(), 0)
+    pipe_line.addChanger(getRadiograficFilm(repos), 0)
     return pipe_line
 
 
