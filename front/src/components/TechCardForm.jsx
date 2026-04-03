@@ -663,22 +663,33 @@ const TableRowInput = ({
   const hasActionButtons = suggestionOptions.length > 0 || canSaveOption || isCreatingOption;
 
   useEffect(() => {
+    // Авто‑подбор высоты полей. Если есть val2 — оба поля растягиваются до одинаковой высоты,
+    // чтобы в блоке «Перечень операций» левая и правая колонки были одной высоты.
     if (!textareaRef.current) {
       return;
     }
 
-    textareaRef.current.style.height = '0px';
-    textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-  }, [value]);
-
-  useEffect(() => {
-    if (!hasVal2 || !textarea2Ref.current) {
+    if (!hasVal2) {
+      textareaRef.current.style.height = '0px';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
       return;
     }
 
+    if (!textarea2Ref.current) {
+      return;
+    }
+
+    textareaRef.current.style.height = '0px';
     textarea2Ref.current.style.height = '0px';
-    textarea2Ref.current.style.height = `${textarea2Ref.current.scrollHeight}px`;
-  }, [value2, hasVal2]);
+
+    const h1 = textareaRef.current.scrollHeight;
+    const h2 = textarea2Ref.current.scrollHeight;
+    const maxH = Math.max(h1, h2);
+
+    const target = Math.max(maxH, 28);
+    textareaRef.current.style.height = `${target}px`;
+    textarea2Ref.current.style.height = `${target}px`;
+  }, [value, value2, hasVal2]);
 
   useEffect(() => {
     if (!isOpen || suggestionOptions.length === 0) {
@@ -1022,8 +1033,9 @@ const OperationsTable = ({ block }) => {
       <table className="w-full border-collapse table-fixed">
         <thead>
           <tr className="border-b border-[#646C89]/30">
-            <th className="w-[24%] py-2 px-2 text-left text-[#646C89] text-xs font-medium">Наименование операции</th>
-            <th className="w-[50%] py-2 px-2 text-left text-[#646C89] text-xs font-medium">Содержание операции, основные требования</th>
+            <th className="w-[50%] py-2 px-2 text-left text-[#646C89] text-xs font-medium">
+              Наименование операции / Содержание, основные требования
+            </th>
             <th className="w-[26%] py-2 px-2 text-left text-[#646C89] text-xs font-medium">Оборудование и инструмент</th>
           </tr>
         </thead>
@@ -1031,13 +1043,12 @@ const OperationsTable = ({ block }) => {
           {operationRows.map((param) => {
             const { content, equipment } = getOperationsRowValue(param);
             const rowKey = `${block.id}.${param.id}`;
+            const operationName = param.name || '-';
 
             return (
               <tr key={rowKey} className="border-b border-[#646C89]/20 align-top">
                 <td className="py-2 px-2 text-sm text-white whitespace-pre-wrap">
-                  {param.name || '-'}
-                </td>
-                <td className="py-2 px-2 text-sm text-white whitespace-pre-wrap">
+                  <div className="font-semibold mb-1">{operationName}</div>
                   {content || '-'}
                 </td>
                 <td className="py-2 px-2 text-sm text-white whitespace-pre-wrap">

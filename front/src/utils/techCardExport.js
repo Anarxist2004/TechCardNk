@@ -1308,9 +1308,24 @@ const buildWordHtml = ({
           vertical-align: middle;
           font-size: 10pt;
         }
-        .ops-gost-name { width: 24%; vertical-align: top; }
-        .ops-gost-content { width: 50%; vertical-align: top; }
-        .ops-gost-equipment { width: 26%; vertical-align: top; }
+        .block-table-ops-gost td {
+          vertical-align: top;
+        }
+        .ops-gost-name {
+          width: 24%;
+          vertical-align: top;
+          word-wrap: break-word;
+        }
+        .ops-gost-content {
+          width: 50%;
+          vertical-align: top;
+          word-wrap: break-word;
+        }
+        .ops-gost-equipment {
+          width: 26%;
+          vertical-align: top;
+          word-wrap: break-word;
+        }
         .cell-number { font-weight: 700; white-space: nowrap; }
         .cell-name { font-weight: 600; }
         .cell-value, .cell-value-wide {

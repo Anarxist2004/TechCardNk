@@ -10,6 +10,7 @@ from repositories.Interfaces.i_materials_db import IMaterialsDB
 from repositories.Interfaces.i_material_standard_db import IMaterialStandardDB
 from repositories.Interfaces.i_rengen_apparatus_db import IRengenApparatusDB
 from repositories.Interfaces.i_radiographic_film_db import IRadiographicFilmDB
+from repositories.Interfaces.i_operation_param_db import IOperationParamDB
 from services.tech_card import TechCardData
 from typing import Any, Dict, List, Optional, Union
 import psycopg2
@@ -27,6 +28,7 @@ class PostgresDataBase(
     IMaterialStandardDB,
     IRengenApparatusDB,
     IRadiographicFilmDB,
+    IOperationParamDB,
 ):
 
     def __init__(self, dsn: str):
@@ -404,4 +406,22 @@ class PostgresDataBase(
             return [dict(r) for r in rows]
         except psycopg2.Error as e:
             print("get_radiographic_films_by_class_range:", e)
+            return []
+
+    def get_operation_params_by_list_id(self, list_id: int) -> List[Dict[str, Any]]:
+        if not self.cursor:
+            return []
+        try:
+            self.cursor.execute(
+                "SELECT op.id, op.id_list, op.name_param, op.val, op.val2 "
+                "FROM public.operation_param op "
+                "INNER JOIN public.list_operation lo ON lo.id = op.id_list "
+                "WHERE op.id_list = %s "
+                "ORDER BY op.id",
+                (list_id,),
+            )
+            rows = self.cursor.fetchall()
+            return [dict(r) for r in rows]
+        except psycopg2.Error as e:
+            print("get_operation_params_by_list_id:", e)
             return []

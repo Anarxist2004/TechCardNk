@@ -10,6 +10,50 @@ class TechCardService(IServise):
         self.repos = repos
         self.pipeLine = piLine
 
+    def _apply_operations_from_db(
+        self, card: TechCardData, list_id: int = 1
+    ) -> None:
+        getter = getattr(self.repos, "get_operation_params_by_list_id", None)
+        if not callable(getter):
+            return
+
+        rows = getter(list_id)
+        if not rows:
+            return
+
+        block = card.get("4")
+        if not isinstance(block, dict):
+            return
+
+        block_name = block.get("name")
+        if not block_name:
+            return
+
+        # Если в БД есть данные, полностью заменяем стандартные операции.
+        block["params"] = {}
+        insert_pos = 1
+        for row in rows:
+            val = row.get("val")
+            val2 = row.get("val2")
+            if val is None and val2 is None:
+                continue
+            row_id = row.get("id")
+            op_name = (
+                str(row.get("name_param")).strip()
+                if row.get("name_param") is not None and str(row.get("name_param")).strip()
+                else f"Операция {row_id}" if row_id is not None else f"Операция {insert_pos}"
+            )
+            card.insert_param_to_block(
+                block_name,
+                insert_pos,
+                {
+                    "name": op_name,
+                    "val": val,
+                    "val2": val2,
+                },
+            )
+            insert_pos += 1
+
     def crateTemplateTechCars(self) -> TechCardData:
         card = TechCardData()
         card.set(
@@ -263,6 +307,7 @@ class TechCardService(IServise):
                 ),
             },
         )
+        self._apply_operations_from_db(card, 1)
         card.sort_all_params()
         return card
 
