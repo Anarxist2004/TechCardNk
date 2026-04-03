@@ -1,3 +1,4 @@
+import re
 from typing import Optional, Tuple
 
 from repositories.Interfaces.i_radiographic_film_db import IRadiographicFilmDB
@@ -27,9 +28,17 @@ def _parse_thickness_mm(value) -> Optional[float]:
     if value is None:
         return None
     try:
-        return float(str(value).replace(",", "."))
+        text = str(value).strip().replace(",", ".")
+        return float(text)
     except (TypeError, ValueError):
-        return None
+        text = str(value).strip().replace(",", ".")
+        match = re.search(r"[-+]?\d*\.?\d+", text)
+        if not match:
+            return None
+        try:
+            return float(match.group(0))
+        except (TypeError, ValueError):
+            return None
 
 
 def _class_range_for_xray(quality: str, thickness_mm: float) -> Optional[Tuple[int, int]]:
@@ -40,8 +49,30 @@ def _class_range_for_xray(quality: str, thickness_mm: float) -> Optional[Tuple[i
         return {"A": (1, 3), "B": (1, 2), "C": (1, 3)}.get(quality)
     if thickness_mm <= 20.0:
         return {"A": (1, 6), "B": (1, 2), "C": (1, 6)}.get(quality)
+    if thickness_mm <= 40.0:
+        return {"A": (1, 6), "B": (1, 3), "C": (1, 6)}.get(quality)
+    # Для толщин > 40 мм в таблице указан диапазон класса B (1-3).
+    # Чтобы changer не "молчал", применяем этот диапазон для любого
+    # выбранного уровня качества.
+    return (1, 3)
 
-    return {"A": (1, 6), "B": (1, 3), "C": (1, 6)}.get(quality)
+
+def _value_matches_expected(current_value, expected_names: list[str]) -> bool:
+    if len(expected_names) == 1:
+        expected = expected_names[0]
+        if isinstance(current_value, str):
+            return current_value.strip() == expected
+        if isinstance(current_value, (list, tuple)) and len(current_value) == 1:
+            return str(current_value[0]).strip() == expected
+        return False
+
+    expected_set = {name.strip() for name in expected_names if str(name).strip()}
+    if isinstance(current_value, (list, tuple)):
+        current_set = {
+            str(item).strip() for item in current_value if str(item).strip()
+        }
+        return current_set == expected_set
+    return False
     
 
 
@@ -74,16 +105,31 @@ class RadiographicFilmFromDb(IDataChanger[TechCardData]):
         if class_range is None:
             return data
 
-        film = self._db.get_radiographic_film_by_class_range(
+        films = self._db.get_radiographic_films_by_class_range(
             class_range[0], class_range[1]
         )
-        if not film:
+        if not films:
+            data.set_param_value(BLOCK_SOURCE, PARAM_FILM, None)
             return data
 
-        film_name = str(film.get("name") or "").strip()
-        if not film_name:
+        names = []
+        seen = set()
+        for film in films:
+            film_name = str(film.get("name") or "").strip()
+            if film_name and film_name not in seen:
+                seen.add(film_name)
+                names.append(film_name)
+        if not names:
+            data.set_param_value(BLOCK_SOURCE, PARAM_FILM, None)
             return data
 
-        data.set_param_value(BLOCK_SOURCE, PARAM_FILM, film_name)
+        current_value = data.get_param_value(BLOCK_SOURCE, PARAM_FILM)
+        if _value_matches_expected(current_value, names):
+            return data
+
+        if len(names) == 1:
+            data.set_param_value(BLOCK_SOURCE, PARAM_FILM, names[0])
+        else:
+            data.set_param_value(BLOCK_SOURCE, PARAM_FILM, names)
         return data
 

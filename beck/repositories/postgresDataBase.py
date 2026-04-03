@@ -386,23 +386,22 @@ class PostgresDataBase(
             print("get_radiographic_films:", e)
             return []
 
-    def get_radiographic_film_by_class_range(
+    def get_radiographic_films_by_class_range(
         self, min_class: int, max_class: int
-    ) -> Optional[Dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         if not self.cursor:
-            return None
+            return []
         try:
             self.cursor.execute(
                 "SELECT id, film_class, name "
                 "FROM public.radiographic_film "
                 "WHERE film_class IS NOT NULL "
                 "AND film_class >= %s AND film_class <= %s "
-                "ORDER BY film_class, id "
-                "LIMIT 1",
+                "ORDER BY film_class, id",
                 (min_class, max_class),
             )
-            row = self.cursor.fetchone()
-            return dict(row) if row else None
+            rows = self.cursor.fetchall()
+            return [dict(r) for r in rows]
         except psycopg2.Error as e:
-            print("get_radiographic_film_by_class_range:", e)
-            return None
+            print("get_radiographic_films_by_class_range:", e)
+            return []

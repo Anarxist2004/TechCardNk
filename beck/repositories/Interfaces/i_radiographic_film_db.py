@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 class IRadiographicFilmDB(ABC):
@@ -11,11 +11,11 @@ class IRadiographicFilmDB(ABC):
         pass
 
     @abstractmethod
-    def get_radiographic_film_by_class_range(
+    def get_radiographic_films_by_class_range(
         self, min_class: int, max_class: int
-    ) -> Optional[Dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         """
-        Одна плёнка с классом в диапазоне [min_class, max_class].
+        Все плёнки с классом в диапазоне [min_class, max_class].
         """
         pass
 
