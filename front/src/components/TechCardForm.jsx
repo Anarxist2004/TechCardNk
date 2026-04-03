@@ -22,7 +22,6 @@ const DISPLAY_MODE_NUMBER_ONLY = 'number_only';
 const DISPLAY_MODE_IMAGE_FULL = 'image_full';
 const DISPLAY_MODE_SECTION_HEADER = 'section_header';
 const DISPLAY_MODE_OPERATIONS_ROW = 'operations_row';
-const DEFAULT_ACTIVE_TAB = 'overview';
 const PANORAMIC_SCHEME_NAME = 'Панорамное просвечивание кольцевого сварного соединения';
 const DOUBLE_WALL_SCHEME_NAME = 'Кольцевое сварное соединение через две стенки';
 const DISTANCE_PARAM_FRAGMENTS = [
@@ -45,65 +44,15 @@ const DOUBLE_WALL_SCHEME_FRAGMENTS = [
   'через две стенки',
 ];
 
-const BLOCK_TAB_GROUPS = [
-  {
-    id: 'overview',
-    label: 'Контекст',
-    description: 'Объект, документация и размеры',
-    blockIds: [1, 2, 3, 4],
-  },
-  {
-    id: 'setup',
-    label: 'Оснащение',
-    description: 'Средства, схема и подготовка',
-    blockIds: [5, 6, 7],
-  },
-  {
-    id: 'operations',
-    label: 'Контроль',
-    description: 'Порядок проведения операций',
-    blockIds: [8],
-  },
-  {
-    id: 'assessment',
-    label: 'Оценка',
-    description: 'Расшифровка и качество',
-    blockIds: [9, 10],
-  },
-];
-
-const EXTRA_BLOCK_TAB = {
-  id: 'other',
-  label: 'Дополнительно',
-  description: 'Прочие разделы техкарты',
-};
-
 const createLocalId = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-const getBlockTabId = (blockId) => {
-  const normalizedBlockId = Number(blockId);
-  const matchedGroup = BLOCK_TAB_GROUPS.find((group) => group.blockIds.includes(normalizedBlockId));
-  return matchedGroup?.id || EXTRA_BLOCK_TAB.id;
-};
+/** Одна вкладка = один блок; id стабилен для выбора активной вкладки. */
+const getBlockTabId = (blockId) => String(blockId);
 
-const buildBlockTabs = (blocks = []) => {
-  const tabs = BLOCK_TAB_GROUPS
-    .map((group) => ({
-      ...group,
-      blocks: blocks.filter((block) => group.blockIds.includes(Number(block.id))),
-    }))
-    .filter((group) => group.blocks.length > 0);
-
-  const extraBlocks = blocks.filter((block) => getBlockTabId(block.id) === EXTRA_BLOCK_TAB.id);
-  if (extraBlocks.length > 0) {
-    tabs.push({
-      ...EXTRA_BLOCK_TAB,
-      blocks: extraBlocks,
-    });
-  }
-
-  return tabs;
-};
+const buildBlockTabs = (blocks = []) => blocks.map((block) => ({
+  id: getBlockTabId(block.id),
+  block,
+}));
 
 const normalizeSuggestionOptions = (options) => {
   if (!Array.isArray(options)) {
@@ -1068,7 +1017,7 @@ const TechCardForm = () => {
   const [uploadedImages, setUploadedImages] = useState({});
   const [standardValuesCache, setStandardValuesCache] = useState({});
   const [savingOptionKey, setSavingOptionKey] = useState(null);
-  const [activeTabId, setActiveTabId] = useState(DEFAULT_ACTIVE_TAB);
+  const [activeTabId, setActiveTabId] = useState('');
   const paramSyncTimerRef = useRef(null);
   const clearParamSyncTimer = () => {
     if (paramSyncTimerRef.current !== null) {
@@ -1090,7 +1039,7 @@ const TechCardForm = () => {
     setCustomFields({});
     setUploadedImages({});
     setStandardValuesCache({});
-    setActiveTabId(DEFAULT_ACTIVE_TAB);
+    setActiveTabId('');
   };
 
   const applyLoadedTechCard = (data) => {
@@ -1107,7 +1056,16 @@ const TechCardForm = () => {
     paramValues2Ref.current = values2;
     selectedOptionIdsRef.current = selectedIds;
     setStandardValuesCache(buildStandardValuesCacheFromBlocks(nextBlocks));
-    setActiveTabId(nextTabs[0]?.id || DEFAULT_ACTIVE_TAB);
+    setActiveTabId((prev) => {
+      if (nextTabs.length === 0) {
+        return '';
+      }
+      const prevStr = prev != null && prev !== '' ? String(prev) : '';
+      if (prevStr && nextTabs.some((t) => String(t.id) === prevStr)) {
+        return prevStr;
+      }
+      return nextTabs[0].id;
+    });
     setLoadError('');
   };
 
@@ -1143,13 +1101,17 @@ const TechCardForm = () => {
     const availableTabs = buildBlockTabs(blocks);
 
     if (availableTabs.length === 0) {
-      if (activeTabId !== DEFAULT_ACTIVE_TAB) {
-        setActiveTabId(DEFAULT_ACTIVE_TAB);
+      if (activeTabId !== '') {
+        setActiveTabId('');
       }
       return;
     }
 
-    if (!availableTabs.some((tab) => tab.id === activeTabId)) {
+    const activeStr = activeTabId != null && activeTabId !== '' ? String(activeTabId) : '';
+    if (
+      !activeStr
+      || !availableTabs.some((tab) => String(tab.id) === activeStr)
+    ) {
       setActiveTabId(availableTabs[0].id);
     }
   }, [blocks, activeTabId]);
@@ -1266,41 +1228,6 @@ const TechCardForm = () => {
     }).length;
 
     return { filled, total };
-  };
-
-  const getTabProgress = (tab) => {
-    if (!tab?.blocks?.length) {
-      return {
-        completedBlocks: 0,
-        totalBlocks: 0,
-        filledFields: 0,
-        totalFields: 0,
-        isComplete: false,
-      };
-    }
-
-    const progressSummary = tab.blocks.reduce((summary, block) => {
-      const blockProgress = getBlockProgress(block);
-      const blockComplete = isBlockComplete(block);
-
-      return {
-        completedBlocks: summary.completedBlocks + (blockComplete ? 1 : 0),
-        totalBlocks: summary.totalBlocks + 1,
-        filledFields: summary.filledFields + blockProgress.filled,
-        totalFields: summary.totalFields + blockProgress.total,
-      };
-    }, {
-      completedBlocks: 0,
-      totalBlocks: 0,
-      filledFields: 0,
-      totalFields: 0,
-    });
-
-    return {
-      ...progressSummary,
-      isComplete: progressSummary.totalBlocks > 0
-        && progressSummary.completedBlocks === progressSummary.totalBlocks,
-    };
   };
 
   const getParamByCompositeKey = (compositeKey) => {
@@ -1812,8 +1739,10 @@ const TechCardForm = () => {
 
   const hasBlocks = blocks.length > 0;
   const blockTabs = buildBlockTabs(blocks);
-  const activeTab = blockTabs.find((tab) => tab.id === activeTabId) || blockTabs[0] || null;
-  const visibleBlocks = activeTab?.blocks || blocks;
+  const activeBlockTab = blockTabs.find((tab) => tab.id === activeTabId) || blockTabs[0] || null;
+  const visibleBlocks = activeBlockTab?.block
+    ? [activeBlockTab.block]
+    : blocks;
 
   return (
     <div className="bg-[#21262F] rounded-2xl p-6 md:p-8">
@@ -1842,49 +1771,57 @@ const TechCardForm = () => {
 
         {hasBlocks && (
           <>
-            {blockTabs.length > 1 && (
-              <div className="overflow-x-auto">
+            {blockTabs.length > 0 && (
+              <div className="overflow-x-auto pb-1">
                 <div className="flex min-w-max gap-2 rounded-xl border border-[#646C89]/20 bg-[#0C1515]/60 p-2">
                   {blockTabs.map((tab) => {
-                    const isActiveTab = tab.id === activeTab?.id;
-                    const tabProgress = getTabProgress(tab);
+                    const { block: tabBlock } = tab;
+                    const isActiveTab = tab.id === activeBlockTab?.id;
+                    const blockProgress = getBlockProgress(tabBlock);
+                    const blockDone = isBlockComplete(tabBlock);
+                    const noEditable = blockProgress.total === 0;
+                    const tabTitle = `${Number.isFinite(Number(tabBlock.id)) ? tabBlock.id : '—'}. ${tabBlock.name || 'Блок'}`;
 
                     return (
                       <button
                         key={tab.id}
                         type="button"
                         onClick={() => setActiveTabId(tab.id)}
-                        className={`min-w-[190px] rounded-lg border px-4 py-3 text-left transition-all ${isActiveTab ? 'shadow-sm' : 'opacity-80 hover:opacity-100'}`}
+                        className={`min-w-[160px] max-w-[260px] rounded-lg border px-3 py-2.5 text-left transition-all ${isActiveTab ? 'shadow-sm' : 'opacity-80 hover:opacity-100'}`}
                         style={{
                           borderColor: isActiveTab ? 'var(--nk-accent-primary)' : 'rgba(138, 131, 119, 0.18)',
                           backgroundColor: isActiveTab ? 'var(--nk-accent-primary-soft)' : 'rgba(12, 21, 21, 0.18)',
                         }}
                       >
-                        <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-start justify-between gap-2">
                           <div
-                            className="text-sm font-semibold"
+                            className="text-sm font-semibold leading-snug line-clamp-2"
                             style={{ color: isActiveTab ? 'var(--nk-text-primary)' : 'var(--nk-text-secondary)' }}
+                            title={tabTitle}
                           >
-                            {tab.label}
+                            {tabTitle}
                           </div>
-                          {tabProgress.isComplete ? (
-                            <CheckCircle size={16} style={{ color: 'var(--nk-accent-secondary)' }} />
+                          {noEditable ? (
+                            <span className="shrink-0 text-[10px] uppercase tracking-wide" style={{ color: 'var(--nk-text-muted)' }}>—</span>
+                          ) : blockDone ? (
+                            <CheckCircle size={16} className="shrink-0" style={{ color: 'var(--nk-accent-secondary)' }} />
                           ) : (
-                            <AlertCircle size={16} style={{ color: 'var(--nk-accent-primary)' }} />
+                            <AlertCircle size={16} className="shrink-0" style={{ color: 'var(--nk-accent-primary)' }} />
                           )}
                         </div>
-                        <div className="mt-1 text-xs" style={{ color: 'var(--nk-text-muted)' }}>
-                          {tab.description}
-                        </div>
-                        <div
-                          className="mt-3 text-[11px] uppercase tracking-[0.14em]"
-                          style={{ color: isActiveTab ? 'var(--nk-accent-secondary)' : 'var(--nk-text-muted)' }}
-                        >
-                          Разделов: {tab.blocks.length}
-                        </div>
-                        <div className="mt-2 flex items-center justify-between text-[11px]" style={{ color: 'var(--nk-text-muted)' }}>
-                          <span>{tabProgress.completedBlocks}/{tabProgress.totalBlocks} блоков</span>
-                          <span>{tabProgress.filledFields}/{tabProgress.totalFields} полей</span>
+                        <div className="mt-2 flex items-center justify-between gap-2 text-[11px]" style={{ color: 'var(--nk-text-muted)' }}>
+                          <span>
+                            {noEditable
+                              ? 'Нет обязательных полей'
+                              : blockDone
+                                ? 'Все параметры указаны'
+                                : 'Есть незаполненные'}
+                          </span>
+                          {!noEditable && (
+                            <span className="tabular-nums shrink-0">
+                              {blockProgress.filled}/{blockProgress.total}
+                            </span>
+                          )}
                         </div>
                       </button>
                     );
