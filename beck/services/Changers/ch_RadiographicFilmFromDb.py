@@ -83,6 +83,7 @@ class RadiographicFilmFromDb(IDataChanger[TechCardData]):
     Новых полей не добавляет.
     """
 
+
     def __init__(self, db: IRadiographicFilmDB):
         self._db = db
 
