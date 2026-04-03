@@ -31,6 +31,9 @@ from services.Changers.ch_RadiographicFilmFromDb import RadiographicFilmFromDb
 from services.Changers.ch_IntensifyingScreenByVoltage import (
     IntensifyingScreenByVoltage,
 )
+from services.Changers.ch_ProtectiveScreenByVoltage import (
+    ProtectiveScreenByVoltage,
+)
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
@@ -54,6 +57,7 @@ def create_pipeline(repos: PostgresDataBase) -> PipeLine:
     pipe_line.addChanger(SensitivityEtalonByMaterial(repos), 0)
     pipe_line.addChanger(RadiographicFilmFromDb(repos), 0)
     pipe_line.addChanger(IntensifyingScreenByVoltage(), 0)
+    pipe_line.addChanger(ProtectiveScreenByVoltage(), 0)
     pipe_line.addChanger(ControlledZoneWidthStub(), 0)
     return pipe_line
 
