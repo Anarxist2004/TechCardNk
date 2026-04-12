@@ -1554,9 +1554,9 @@ const buildWordHtml = ({
           max-width: 100%;
           box-sizing: border-box;
           line-height: 0;
-          border: 1.5pt solid ${IMAGE_FRAME_COLOR};
+          border: 2.5pt solid ${IMAGE_FRAME_COLOR};
           border-radius: 10pt;
-          padding: 6pt;
+          padding: 2pt;
         }
         .off-diagram-wrap img {
           display: block;
@@ -1626,9 +1626,9 @@ const buildWordHtml = ({
           overflow: hidden;
           max-width: 100%;
           box-sizing: border-box;
-          border: 1.5pt solid ${IMAGE_FRAME_COLOR};
+          border: 2.5pt solid ${IMAGE_FRAME_COLOR};
           border-radius: 10pt;
-          padding: 3mm;
+          padding: 1.2mm;
         }
         .image-caption { margin-bottom: 2mm; font-weight: 600; }
         .image-wrapper img {
@@ -1652,7 +1652,7 @@ const buildWordHtml = ({
           width: 48%;
           margin: 1%;
           vertical-align: top;
-          border: 1.5pt solid ${IMAGE_FRAME_COLOR};
+          border: 2.5pt solid ${IMAGE_FRAME_COLOR};
           border-radius: 10pt;
           padding: 3mm;
           page-break-inside: avoid;

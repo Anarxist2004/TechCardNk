@@ -1912,7 +1912,7 @@ const TechCardForm = () => {
                                         )}
                                         <div className="flex justify-center">
                                           <div
-                                            className={`rounded-xl border-2 p-3 ${
+                                            className={`rounded-xl border-4 p-1 ${
                                               isFullImageMode ? 'w-full max-w-4xl' : 'inline-flex max-w-full'
                                             }`}
                                             style={{
@@ -2050,7 +2050,7 @@ const TechCardForm = () => {
                                 <img
                                   src={image.preview}
                                   alt={image.name}
-                                  className="w-full h-32 object-cover rounded-lg border-2"
+                                  className="w-full h-32 object-cover rounded-lg border-4"
                                   style={{ borderColor: IMAGE_FRAME_COLOR }}
                                 />
                                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
