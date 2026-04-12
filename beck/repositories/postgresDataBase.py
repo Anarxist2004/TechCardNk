@@ -14,7 +14,7 @@ from repositories.Interfaces.i_operation_param_db import IOperationParamDB
 from services.tech_card import TechCardData
 from typing import Any, Dict, List, Optional, Union
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import Json, RealDictCursor
 
 
 class PostgresDataBase(
@@ -30,6 +30,15 @@ class PostgresDataBase(
     IRadiographicFilmDB,
     IOperationParamDB,
 ):
+
+    @staticmethod
+    def _serialize_dt(value):
+        if value is None:
+            return None
+        iso = getattr(value, "isoformat", None)
+        if callable(iso):
+            return iso()
+        return str(value)
 
     def __init__(self, dsn: str):
         IRepository.__init__(self)
@@ -425,3 +434,85 @@ class PostgresDataBase(
         except psycopg2.Error as e:
             print("get_operation_params_by_list_id:", e)
             return []
+
+    def save_tech_card_snapshot(
+        self, name: str, card_data: Dict[str, Any], card_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        if not self.cursor:
+            raise RuntimeError("Database cursor is not initialized")
+
+        try:
+            row = None
+            if card_id is not None:
+                self.cursor.execute(
+                    "UPDATE public.tech_cards "
+                    "SET name = %s, card_data = %s, updated_at = NOW() "
+                    "WHERE id = %s "
+                    "RETURNING id, name, created_at, updated_at",
+                    (name, Json(card_data), card_id),
+                )
+                row = self.cursor.fetchone()
+
+            if row is None:
+                self.cursor.execute(
+                    "INSERT INTO public.tech_cards (name, card_data) "
+                    "VALUES (%s, %s) "
+                    "RETURNING id, name, created_at, updated_at",
+                    (name, Json(card_data)),
+                )
+                row = self.cursor.fetchone()
+
+            self.conn.commit()
+            result = dict(row) if row else {}
+            result["created_at"] = self._serialize_dt(result.get("created_at"))
+            result["updated_at"] = self._serialize_dt(result.get("updated_at"))
+            return result
+        except psycopg2.Error as e:
+            if self.conn:
+                self.conn.rollback()
+            print("save_tech_card_snapshot:", e)
+            raise
+
+    def list_saved_tech_cards(self) -> List[Dict[str, Any]]:
+        if not self.cursor:
+            return []
+        try:
+            self.cursor.execute(
+                "SELECT id, name, created_at, updated_at "
+                "FROM public.tech_cards "
+                "ORDER BY updated_at DESC, id DESC"
+            )
+            rows = self.cursor.fetchall()
+            result = []
+            for row in rows:
+                item = dict(row)
+                item["created_at"] = self._serialize_dt(item.get("created_at"))
+                item["updated_at"] = self._serialize_dt(item.get("updated_at"))
+                result.append(item)
+            return result
+        except psycopg2.Error as e:
+            print("list_saved_tech_cards:", e)
+            return []
+
+    def get_saved_tech_card(self, card_id: int) -> Optional[Dict[str, Any]]:
+        if not self.cursor:
+            return None
+        try:
+            self.cursor.execute(
+                "SELECT id, name, card_data, created_at, updated_at "
+                "FROM public.tech_cards "
+                "WHERE id = %s "
+                "LIMIT 1",
+                (card_id,),
+            )
+            row = self.cursor.fetchone()
+            if not row:
+                return None
+
+            result = dict(row)
+            result["created_at"] = self._serialize_dt(result.get("created_at"))
+            result["updated_at"] = self._serialize_dt(result.get("updated_at"))
+            return result
+        except psycopg2.Error as e:
+            print("get_saved_tech_card:", e)
+            return None

@@ -4,8 +4,18 @@ import TechCardForm from './components/TechCardForm';
 
 function App() {
   const [showForm, setShowForm] = useState(false);
+  const [initialSavedCard, setInitialSavedCard] = useState(null);
 
-  const handleCreateNew = () => setShowForm(true);
+  const handleCreateNew = () => {
+    setInitialSavedCard(null);
+    setShowForm(true);
+  };
+
+  const handleOpenExisting = (savedCard) => {
+    setInitialSavedCard(savedCard);
+    setShowForm(true);
+  };
+
   const handleBackToStart = () => setShowForm(false);
 
   return (
@@ -40,9 +50,15 @@ function App() {
       <main className="flex flex-1">
         <div className="container mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-8 md:px-8">
           {!showForm ? (
-            <StartScreen onCreateNew={handleCreateNew} />
+            <StartScreen
+              onCreateNew={handleCreateNew}
+              onOpenExisting={handleOpenExisting}
+            />
           ) : (
-            <TechCardForm />
+            <TechCardForm
+              key={initialSavedCard?.id ? `saved-${initialSavedCard.id}` : 'new-tech-card'}
+              initialSavedCard={initialSavedCard}
+            />
           )}
         </div>
       </main>

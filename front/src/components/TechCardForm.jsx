@@ -48,6 +48,40 @@ const DOUBLE_WALL_SCHEME_FRAGMENTS = [
 
 const createLocalId = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+const normalizeUploadedImagesState = (images) => {
+  if (!images || typeof images !== 'object') {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(images).map(([blockId, blockImages]) => [
+      blockId,
+      Array.isArray(blockImages)
+        ? blockImages
+          .filter((image) => image && image.preview)
+          .map((image, index) => ({
+            id: image.id || `${blockId}-image-${index}`,
+            name: image.name || `Изображение ${index + 1}`,
+            preview: image.preview,
+          }))
+        : [],
+    ]),
+  );
+};
+
+const buildUploadedImagesForSave = (images) => Object.fromEntries(
+  Object.entries(normalizeUploadedImagesState(images))
+    .map(([blockId, blockImages]) => [
+      blockId,
+      blockImages.map((image) => ({
+        id: image.id,
+        name: image.name,
+        preview: image.preview,
+      })),
+    ])
+    .filter(([, blockImages]) => blockImages.length > 0),
+);
+
 /** Одна вкладка = один блок; id стабилен для выбора активной вкладки. */
 const getBlockTabId = (blockId) => String(blockId);
 
@@ -1001,7 +1035,7 @@ const OperationsTable = ({ block }) => {
   );
 };
 
-const TechCardForm = () => {
+const TechCardForm = ({ initialSavedCard = null }) => {
   const [blocks, setBlocks] = useState([]);
   const [loadingBlocks, setLoadingBlocks] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -1020,6 +1054,8 @@ const TechCardForm = () => {
   const [standardValuesCache, setStandardValuesCache] = useState({});
   const [savingOptionKey, setSavingOptionKey] = useState(null);
   const [activeTabId, setActiveTabId] = useState('');
+  const [savedCardId, setSavedCardId] = useState(initialSavedCard?.id ?? null);
+  const [cardName, setCardName] = useState(initialSavedCard?.cardName || initialSavedCard?.name || '');
   const paramSyncTimerRef = useRef(null);
   const clearParamSyncTimer = () => {
     if (paramSyncTimerRef.current !== null) {
@@ -1042,6 +1078,8 @@ const TechCardForm = () => {
     setUploadedImages({});
     setStandardValuesCache({});
     setActiveTabId('');
+    setSavedCardId(null);
+    setCardName('');
   };
 
   const applyLoadedTechCard = (data) => {
@@ -1071,6 +1109,57 @@ const TechCardForm = () => {
     setLoadError('');
   };
 
+  const applySavedTechCard = (savedCard) => {
+    if (!savedCard?.techCard) {
+      resetLoadedTechCard();
+      setLoadError('Не удалось прочитать сохранённую карту.');
+      return;
+    }
+
+    applyLoadedTechCard(savedCard.techCard);
+    setCustomFields(savedCard.customFields || {});
+    setUploadedImages(normalizeUploadedImagesState(savedCard.uploadedImages));
+    setSavedCardId(savedCard.id ?? null);
+    setCardName(savedCard.cardName || savedCard.name || '');
+  };
+
+  const buildStoredTechCardSnapshot = (cardData) => {
+    const sourceBlocks = cardData?.blocks || blocks;
+    const sourceType = cardData?.type ?? objectType;
+    const { values, values2, selectedIds } = buildFormStateFromBlocks(sourceBlocks);
+
+    return {
+      cardName: String(cardName || '').trim(),
+      techCard: buildTechCardPayload(
+        sourceType,
+        DEFAULT_METHODOLOGY,
+        sourceBlocks,
+        values,
+        selectedIds,
+        values2,
+      ),
+      customFields,
+      uploadedImages: buildUploadedImagesForSave(uploadedImages),
+    };
+  };
+
+  const saveCurrentTechCard = async (cardData) => {
+    const saved = await api.saveTechCard({
+      id: savedCardId,
+      name: String(cardName || '').trim(),
+      data: buildStoredTechCardSnapshot(cardData),
+    });
+
+    if (saved?.id !== undefined && saved?.id !== null) {
+      setSavedCardId(saved.id);
+    }
+    if (saved?.name) {
+      setCardName(saved.name);
+    }
+
+    return saved;
+  };
+
   const loadTechCard = async () => {
     clearParamSyncTimer();
     setLoadingBlocks(true);
@@ -1089,8 +1178,16 @@ const TechCardForm = () => {
   };
 
   useEffect(() => {
+    clearParamSyncTimer();
+
+    if (initialSavedCard?.techCard) {
+      applySavedTechCard(initialSavedCard);
+      setLoadingBlocks(false);
+      return;
+    }
+
     void loadTechCard();
-  }, []);
+  }, [initialSavedCard]);
 
   useEffect(() => () => {
     if (paramSyncTimerRef.current !== null) {
@@ -1671,7 +1768,11 @@ const TechCardForm = () => {
         applyLoadedTechCard(result);
       }
 
-      alert('Карта успешно обработана!');
+      const savedCard = await saveCurrentTechCard(
+        result.blocks && result.blocks.length > 0 ? result : null,
+      );
+
+      alert(`Карта успешно обработана и сохранена${savedCard?.name ? `: ${savedCard.name}` : '!'}`);
     } catch (error) {
       console.error('Ошибка обработки карты:', error);
       alert(`Ошибка при обработке карты: ${error.message}`);
@@ -1689,7 +1790,7 @@ const TechCardForm = () => {
 
     try {
       await exportTechCardToWord({
-        title: 'Технологическая карта',
+        title: String(cardName || '').trim() || 'Технологическая карта',
         methodologyName: '',
         objectName: '',
         elementName: '',
@@ -1751,6 +1852,20 @@ const TechCardForm = () => {
       <h2 className="text-2xl font-bold text-white mb-6 pb-4 border-b border-[#646C89]/30">
         Технологическая карта
       </h2>
+
+      <div className="mb-6">
+        <label className="mb-2 block text-sm font-medium text-[#646C89]" htmlFor="tech-card-name">
+          Название технологической карты
+        </label>
+        <input
+          id="tech-card-name"
+          type="text"
+          value={cardName}
+          onChange={(event) => setCardName(event.target.value)}
+          placeholder="Например: ТК трубопровод DN500"
+          className="w-full rounded-xl border border-[#646C89]/40 bg-[#0C1515] px-4 py-3 text-white placeholder-[#646C89] focus:border-[#D97B54] focus:outline-none"
+        />
+      </div>
 
       <div className="space-y-6">
         {loadingBlocks && !hasBlocks && (

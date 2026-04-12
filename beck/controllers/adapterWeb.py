@@ -45,6 +45,19 @@ def create_adapter(controller: IControllers,):
                 tech_card = controller.get_template()
             elif control_type == "updateTechCard":
                 tech_card = controller.updateTechCard(request_payload.get("techCard", {}))
+            elif control_type == "saveTechCard":
+                tech_card = controller.saveTechCard(
+                    request_payload.get("name", ""),
+                    request_payload.get("data", {}),
+                    request_payload.get("id"),
+                )
+            elif control_type == "listSavedTechCards":
+                tech_card = controller.listSavedTechCards()
+            elif control_type == "getSavedTechCard":
+                card_id = safe_int(request_payload.get("id"), 0)
+                tech_card = controller.getSavedTechCard(card_id)
+                if tech_card is None:
+                    raise HTTPException(status_code=404, detail="Tech card not found")
             else:
                 return {}
 

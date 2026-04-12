@@ -1,3 +1,6 @@
+from datetime import datetime
+from typing import Any
+
 from services.tech_card import TechCardData
 from services.PipeLine import PipeLine
 from repositories.Interfaces.i_repository import IRepository
@@ -215,5 +218,61 @@ class TechCardService(IServise):
     def updateTechCard(self, techCard) -> TechCardData:
         self.pipeLine.process(techCard, 0)
         return techCard
+
+    def _build_default_card_name(self, card_data: dict[str, Any]) -> str:
+        snapshot_name = str(card_data.get("cardName") or "").strip()
+        if snapshot_name:
+            return snapshot_name
+
+        tech_card = card_data.get("techCard", {})
+        params = tech_card.get("params", {}) if isinstance(tech_card, dict) else {}
+        preferred_names = {
+            "РќРђРРњР•РќРћР’РђРќРР• РћР‘РЄР•РљРўРђ",
+            "РЁРёС„СЂ",
+        }
+
+        for block in params.values():
+            if not isinstance(block, dict):
+                continue
+            for param in block.get("params", {}).values():
+                if not isinstance(param, dict):
+                    continue
+                if param.get("name") not in preferred_names:
+                    continue
+                value = param.get("val")
+                if value is None:
+                    continue
+                text = str(value).strip()
+                if text:
+                    return text
+
+        return (
+            "РўРµС…РЅРѕР»РѕРіРёС‡РµСЃРєР°СЏ РєР°СЂС‚Р° "
+            f"{datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        )
+
+    def saveTechCard(
+        self, name: str, card_data: dict[str, Any], card_id: int | None = None
+    ) -> dict[str, Any]:
+        saver = getattr(self.repos, "save_tech_card_snapshot", None)
+        if not callable(saver):
+            raise RuntimeError("save_tech_card_snapshot is not implemented")
+
+        normalized_name = str(name or "").strip() or self._build_default_card_name(
+            card_data
+        )
+        return saver(normalized_name, card_data, card_id)
+
+    def listSavedTechCards(self) -> list[dict[str, Any]]:
+        loader = getattr(self.repos, "list_saved_tech_cards", None)
+        if not callable(loader):
+            raise RuntimeError("list_saved_tech_cards is not implemented")
+        return loader()
+
+    def getSavedTechCard(self, card_id: int) -> dict[str, Any] | None:
+        loader = getattr(self.repos, "get_saved_tech_card", None)
+        if not callable(loader):
+            raise RuntimeError("get_saved_tech_card is not implemented")
+        return loader(card_id)
 
 

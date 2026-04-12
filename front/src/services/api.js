@@ -106,6 +106,50 @@ function transformBlocksResponse(data) {
   return { type: data.type, blocks, flatParams };
 }
 
+function normalizeSavedUploadedImages(uploadedImages) {
+  if (!uploadedImages || typeof uploadedImages !== 'object') {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(uploadedImages).map(([blockId, images]) => [
+      blockId,
+      Array.isArray(images)
+        ? images
+          .filter((image) => image && image.preview)
+          .map((image, index) => ({
+            id: image.id || `${blockId}-saved-${index}`,
+            name: image.name || `Изображение ${index + 1}`,
+            preview: image.preview,
+          }))
+        : [],
+    ]),
+  );
+}
+
+function transformSavedTechCardResponse(data) {
+  if (!data) {
+    return null;
+  }
+
+  const snapshot = data.card_data && typeof data.card_data === 'object'
+    ? data.card_data
+    : {};
+
+  return {
+    id: data.id ?? null,
+    name: data.name || snapshot.cardName || '',
+    createdAt: data.created_at ?? null,
+    updatedAt: data.updated_at ?? null,
+    cardName: snapshot.cardName || data.name || '',
+    techCard: transformBlocksResponse(snapshot.techCard || {}),
+    customFields: snapshot.customFields && typeof snapshot.customFields === 'object'
+      ? snapshot.customFields
+      : {},
+    uploadedImages: normalizeSavedUploadedImages(snapshot.uploadedImages),
+  };
+}
+
 async function loadTechCardTemplate(methodology = 0) {
   const data = await postRequest('template', {
     methodology: normalizeMethodology(methodology),
@@ -121,6 +165,25 @@ const api = {
   updateTechCard: async (techCardData) => {
     const data = await postRequest('updateTechCard', { techCard: techCardData });
     return transformBlocksResponse(data);
+  },
+
+  saveTechCard: (payload) => postRequest('saveTechCard', payload),
+
+  listSavedTechCards: async () => {
+    const data = await postRequest('listSavedTechCards', {});
+    return Array.isArray(data)
+      ? data.map((item) => ({
+        id: item.id,
+        name: item.name || `Техкарта #${item.id}`,
+        createdAt: item.created_at ?? null,
+        updatedAt: item.updated_at ?? null,
+      }))
+      : [];
+  },
+
+  getSavedTechCard: async (id) => {
+    const data = await postRequest('getSavedTechCard', { id });
+    return transformSavedTechCardResponse(data);
   },
 
   createParamOption: (payload) => postRequest('createParamOption', payload),
