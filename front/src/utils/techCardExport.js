@@ -2,6 +2,9 @@ const DISPLAY_MODE_NUMBER_ONLY = 'number_only';
 const DISPLAY_MODE_IMAGE_FULL = 'image_full';
 const DISPLAY_MODE_SECTION_HEADER = 'section_header';
 const DISPLAY_MODE_OPERATIONS_ROW = 'operations_row';
+const IMAGE_FRAME_COLOR = '#98785c';
+const BLOCK2_IMAGE_ANCHOR = 'тип сварного соединения';
+const BLOCK3_IMAGE_ANCHOR = 'схема просвечивания';
 
 /** Значения поля subtitle для блока 2 (API / шаблон). */
 export const PARAM_SUBTITLE_BLOCK2 = {
@@ -16,6 +19,11 @@ const escapeHtml = (value = '') => String(value)
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
+
+const normalizeComparableText = (value = '') => String(value)
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLowerCase();
 
 /**
  * Word: растр перед вставкой умеренно вписываем в рамку (см. prepareExportImages),
@@ -46,6 +54,9 @@ const OFF_B2_VAL_DZ_PCT = 25;
 const OFF_B3_DIAGRAM_COL_PCT = 40;
 const OFF_B3_PNAME_PCT = 38;
 const OFF_B3_PVAL_PCT = 22;
+const OFF_B3_TEXT_TOTAL_PCT = OFF_B3_PNAME_PCT + OFF_B3_PVAL_PCT;
+const OFF_B3_INLINE_PNAME_PCT = Math.round((OFF_B3_PNAME_PCT / OFF_B3_TEXT_TOTAL_PCT) * 100);
+const OFF_B3_INLINE_PVAL_PCT = 100 - OFF_B3_INLINE_PNAME_PCT;
 
 /** Атрибуты ячейки со схемой для Word (фиксированная доля таблицы). */
 const offB2DiagramTdAttrs = () => ` width="${OFF_B2_DIAGRAM_COL_PCT}%" style="width:${OFF_B2_DIAGRAM_COL_PCT}%;max-width:${OFF_B2_DIAGRAM_COL_PCT}%;overflow:hidden;vertical-align:top;"`;
@@ -53,6 +64,39 @@ const offB2DiagramTdAttrs = () => ` width="${OFF_B2_DIAGRAM_COL_PCT}%" style="wi
 const offB3DiagramTdAttrs = () => ` width="${OFF_B3_DIAGRAM_COL_PCT}%" style="width:${OFF_B3_DIAGRAM_COL_PCT}%;max-width:${OFF_B3_DIAGRAM_COL_PCT}%;overflow:hidden;vertical-align:top;"`;
 
 const OFF_B2_DIAGRAM_SPACER_PCT = 100 - OFF_B2_SIDE_COL_PCT - OFF_B2_DIAGRAM_COL_PCT;
+
+const isBlock2ImageAnchorParam = (param) => (
+  normalizeComparableText(param?.name) === BLOCK2_IMAGE_ANCHOR
+);
+
+const isBlock3ImageAnchorParam = (param) => (
+  normalizeComparableText(param?.name) === BLOCK3_IMAGE_ANCHOR
+);
+
+const findInlineImageAnchorKeyFromRows = (rows, blockId, predicate) => {
+  const matchedRow = rows.find((row) => row.kind === 'kv' && predicate(row.param));
+  if (matchedRow?.param?.id != null) {
+    return `${blockId}.${matchedRow.param.id}`;
+  }
+
+  const firstValueRow = rows.find((row) => row.kind === 'kv');
+  return firstValueRow?.param?.id != null ? `${blockId}.${firstValueRow.param.id}` : '';
+};
+
+const findInlineImageAnchorKeyFromParams = (params, blockId, predicate) => {
+  const matchedParam = params.find(predicate);
+  if (matchedParam?.id != null) {
+    return `${blockId}.${matchedParam.id}`;
+  }
+
+  const firstParam = params[0];
+  return firstParam?.id != null ? `${blockId}.${firstParam.id}` : '';
+};
+
+const buildInlineDiagramRow = (cellClassName, content, colspan) => `
+  <tr>
+    <td class="${cellClassName}" colspan="${colspan}">${content}</td>
+  </tr>`;
 
 const wordImg = (src, alt, style, opts = {}) => {
   const safeSrc = escapeHtml(String(src || ''));
@@ -84,17 +128,17 @@ const wordDiagramWrapB2 = (src, size) => {
   </div>`;
 };
 
-const wordDiagramWrapB3 = (src, caption, size) => {
+const wordDiagramWrapB3 = (src, _caption, size) => {
   if (size?.w != null && size?.h != null) {
     const { w, h } = size;
     return `
   <div class="off-diagram-wrap off-b3-img" style="width:100%;max-width:100%;overflow:hidden;text-align:center;line-height:0;">
-    ${wordImg(src, caption, buildDiagramImgStyle(w, h), { widthPx: w, heightPx: h })}
+    ${wordImg(src, '', buildDiagramImgStyle(w, h), { widthPx: w, heightPx: h })}
   </div>`;
   }
   return `
   <div class="off-diagram-wrap off-b3-img" style="width:100%;max-width:100%;overflow:hidden;text-align:center;line-height:0;">
-    ${wordImg(src, caption, WORD_DIAGRAM_IMG_STYLE)}
+    ${wordImg(src, '', WORD_DIAGRAM_IMG_STYLE)}
   </div>`;
 };
 
@@ -631,8 +675,7 @@ const buildOfficialBlock2GroupedHtml = (
       <table class="official-table official-b2 official-b2-grouped" width="100%" border="1">
         <tr>
           <td class="off-b2-side">${sideLabel}</td>
-          <td class="off-b2-diagram-spacer">&#160;</td>
-          <td class="off-b2-diagram" align="center"${offB2DiagramTdAttrs()}>
+          <td class="off-b2-inline-image" colspan="2">
             ${wordDiagramWrapB2(diagramSrc, diagramSize)}
           </td>
         </tr>
@@ -646,7 +689,10 @@ const buildOfficialBlock2GroupedHtml = (
     const g = groups[groupIndex];
 
     if (isBlock2ObjectControlSubtitle(g.subtitle)) {
-      const n = countRowsInGroup(g);
+      const imageAnchorKey = diagramSrc
+        ? findInlineImageAnchorKeyFromRows(g.rows, blockId, isBlock2ImageAnchorParam)
+        : '';
+      const n = countRowsInGroup(g) + (diagramSrc && imageAnchorKey ? 1 : 0);
       const ocSide = `<td class="off-b2-side" rowspan="${n}">${sideLabel}</td>`;
       let first = true;
       for (const row of g.rows) {
@@ -660,9 +706,10 @@ const buildOfficialBlock2GroupedHtml = (
         </tr>`);
         } else {
           const p = row.param;
+          const key = `${blockId}.${p.id}`;
           const val = getParamExportCellText(
             p,
-            `${blockId}.${p.id}`,
+            key,
             paramValues,
             paramValues2,
           );
@@ -672,6 +719,13 @@ const buildOfficialBlock2GroupedHtml = (
           <td class="off-b2-name off-b2-name-oc">${escapeHtml(p.name || '')}</td>
           <td class="off-b2-val off-b2-val-oc" align="center">${escapeHtml(val || '')}</td>
         </tr>`);
+          if (diagramSrc && key === imageAnchorKey) {
+            trs.push(buildInlineDiagramRow(
+              'off-b2-inline-image',
+              wordDiagramWrapB2(diagramSrc, diagramSize),
+              2,
+            ));
+          }
         }
       }
       groupIndex += 1;
@@ -709,39 +763,13 @@ const buildOfficialBlock2GroupedHtml = (
         (acc, zg) => acc + getDiagramZoneDisplayRows(zg).length,
         0,
       );
-
-      const diagramTd = diagramSrc
-        ? `<td class="off-b2-diagram" rowspan="${zoneRowCount}" align="center" valign="top"${offB2DiagramTdAttrs()}>
-        ${wordDiagramWrapB2(diagramSrc, diagramSize)}
-      </td>`
-        : '';
-
-      let firstPhysical = true;
       for (const zg of zoneGroups) {
         const displayRows = getDiagramZoneDisplayRows(zg);
         for (const row of displayRows) {
-          if (diagramSrc) {
-            if (row.kind === 'section') {
-              trs.push(`
-        <tr>
-          <td class="off-b2-section off-b2-section-dz" colspan="2">${escapeHtml(row.title)}</td>
-          ${firstPhysical ? diagramTd : ''}
-        </tr>`);
-            } else {
-              const p = row.param;
-              const key = `${blockId}.${p.id}`;
-              const val = getParamExportCellText(p, key, paramValues, paramValues2);
-              trs.push(`
-        <tr>
-          <td class="off-b2-name off-b2-name-dz">${escapeHtml(p.name || '')}</td>
-          <td class="off-b2-val off-b2-val-dz" align="center">${escapeHtml(val || '')}</td>
-          ${firstPhysical ? diagramTd : ''}
-        </tr>`);
-            }
-          } else if (row.kind === 'section') {
+          if (row.kind === 'section') {
             trs.push(`
         <tr>
-          <td class="off-b2-section off-b2-section-full" colspan="3">${escapeHtml(row.title)}</td>
+          <td class="off-b2-section off-b2-section-dz" colspan="2">${escapeHtml(row.title)}</td>
         </tr>`);
           } else {
             const p = row.param;
@@ -753,7 +781,6 @@ const buildOfficialBlock2GroupedHtml = (
           <td class="off-b2-val off-b2-val-wide" align="center" colspan="2">${escapeHtml(val || '')}</td>
         </tr>`);
           }
-          firstPhysical = false;
         }
       }
       groupIndex = end;
@@ -824,7 +851,10 @@ const buildOfficialBlock2Html = (block, paramValues, imageSrcMap, paramValues2 =
   }
 
   const sideLabel = `${escapeHtml(String(block.id))}. ${escapeHtml((block.name || 'ОБЪЕКТ КОНТРОЛЯ').toUpperCase())}`;
-  const rowspanMain = Math.max(1, leftRows.length);
+  const imageAnchorKey = diagramSrc
+    ? findInlineImageAnchorKeyFromRows(leftRows, block.id, isBlock2ImageAnchorParam)
+    : '';
+  const rowspanMain = Math.max(1, leftRows.length + (diagramSrc && imageAnchorKey ? 1 : 0));
 
   if (leftRows.length === 0 && !diagramSrc) {
     return `
@@ -838,19 +868,12 @@ const buildOfficialBlock2Html = (block, paramValues, imageSrcMap, paramValues2 =
       <table class="official-table official-b2 official-b2-grouped" width="100%" border="1">
         <tr>
           <td class="off-b2-side">${sideLabel}</td>
-          <td class="off-b2-diagram-spacer">&#160;</td>
-          <td class="off-b2-diagram" align="center"${offB2DiagramTdAttrs()}>
+          <td class="off-b2-inline-image" colspan="2">
             ${wordDiagramWrapB2(diagramSrc, diagramSize)}
           </td>
         </tr>
       </table>`;
   }
-
-  const diagramCell = diagramSrc
-    ? `<td class="off-b2-diagram" rowspan="${rowspanMain}" align="center" valign="top"${offB2DiagramTdAttrs()}>
-        ${wordDiagramWrapB2(diagramSrc, diagramSize)}
-      </td>`
-    : '';
 
   const body = leftRows.map((row, index) => {
     const isFirst = index === 0;
@@ -863,29 +886,34 @@ const buildOfficialBlock2Html = (block, paramValues, imageSrcMap, paramValues2 =
         <tr>
           ${sideCell}
           <td class="off-b2-section off-b2-section-4col" colspan="2">${escapeHtml(row.title)}</td>
-          ${isFirst ? diagramCell : ''}
         </tr>`;
     }
 
     const p = row.param;
     const key = `${block.id}.${p.id}`;
     const val = getParamExportCellText(p, key, paramValues, paramValues2);
-    return `
+    const valueRow = `
       <tr>
         ${sideCell}
         <td class="off-b2-name">${escapeHtml(p.name || '')}</td>
         <td class="off-b2-val" align="center">${escapeHtml(val || '')}</td>
-        ${isFirst ? diagramCell : ''}
       </tr>`;
+    if (diagramSrc && key === imageAnchorKey) {
+      return `${valueRow}${buildInlineDiagramRow(
+        'off-b2-inline-image',
+        wordDiagramWrapB2(diagramSrc, diagramSize),
+        2,
+      )}`;
+    }
+    return valueRow;
   }).join('');
 
   return `
     <table class="official-table official-b2" width="100%" border="1">
       <colgroup>
         <col style="width:${OFF_B2_SIDE_COL_PCT}%;" />
-        <col style="width:${OFF_B2_NAME_4COL_PCT}%;" />
-        <col style="width:${OFF_B2_VAL_4COL_PCT}%;" />
-        <col style="width:${OFF_B2_DIAGRAM_COL_PCT}%;" />
+        <col style="width:${OFF_B2_NAME_OC_PCT}%;" />
+        <col style="width:${OFF_B2_VAL_OC_PCT}%;" />
       </colgroup>
       ${body}
     </table>`;
@@ -920,9 +948,16 @@ const buildOfficialBlock3Html = (block, paramValues, imageSrcMap, paramValues2 =
   const nDataRows = Math.max(textParams.length, 1);
   const diagramRowspan = 1 + nDataRows;
 
+  const diagramKey = imageParams.length > 0 ? `${block.id}.${imageParams[0].id}` : '';
+  const diagramSrc = diagramKey ? (imageSrcMap[diagramKey] || '') : '';
+  const diagramSize = diagramKey ? imageMetaMap[diagramKey] : undefined;
+  const imageAnchorKey = diagramSrc
+    ? findInlineImageAnchorKeyFromParams(textParams, block.id, isBlock3ImageAnchorParam)
+    : '';
+
   const titleRow = `
     <tr>
-      <td colspan="3" class="off-b3-banner" align="center">
+      <td colspan="2" class="off-b3-banner" align="center">
         <b>${escapeHtml(String(block.id))}. ${escapeHtml((block.name || '').toUpperCase())}</b>
       </td>
     </tr>`;
@@ -930,36 +965,48 @@ const buildOfficialBlock3Html = (block, paramValues, imageSrcMap, paramValues2 =
   const subHeadRow = `
     <tr>
       <td colspan="2" class="off-b3-subhead" align="center"><b>ПАРАМЕТРЫ КОНТРОЛЯ</b></td>
-      ${diagramCell.replace('__ROWSPAN__', String(diagramRowspan))}
     </tr>`;
 
   const dataRows = textParams.length > 0
     ? textParams.map((p) => {
       const key = `${block.id}.${p.id}`;
       const val = getParamExportCellText(p, key, paramValues, paramValues2);
-      return `
+      const valueRow = `
         <tr>
           <td class="off-b3-pname">${escapeHtml(p.name || '')}</td>
           <td class="off-b3-pval" align="center">${escapeHtml(val || '')}</td>
         </tr>`;
+      if (diagramSrc && key === imageAnchorKey) {
+        return `${valueRow}${buildInlineDiagramRow(
+          'off-b3-inline-image',
+          wordDiagramWrapB3(diagramSrc, '', diagramSize),
+          2,
+        )}`;
+      }
+      return valueRow;
     }).join('')
-    : `
+    : `${diagramSrc
+      ? buildInlineDiagramRow(
+        'off-b3-inline-image',
+        wordDiagramWrapB3(diagramSrc, '', diagramSize),
+        2,
+      )
+      : `
       <tr>
         <td class="off-b3-pname">&#160;</td>
         <td class="off-b3-pval" align="center">&#160;</td>
-      </tr>`;
+      </tr>`}`;
 
   const footnoteRow = `
     <tr>
-      <td colspan="3" class="off-b3-footnote">${escapeHtml(BLOCK3_FOOTNOTE)}</td>
+      <td colspan="2" class="off-b3-footnote">${escapeHtml(BLOCK3_FOOTNOTE)}</td>
     </tr>`;
 
   return `
     <table class="official-table official-b3" width="100%" border="1">
       <colgroup>
-        <col style="width:${OFF_B3_PNAME_PCT}%;" />
-        <col style="width:${OFF_B3_PVAL_PCT}%;" />
-        <col style="width:${OFF_B3_DIAGRAM_COL_PCT}%;" />
+        <col style="width:${OFF_B3_INLINE_PNAME_PCT}%;" />
+        <col style="width:${OFF_B3_INLINE_PVAL_PCT}%;" />
       </colgroup>
       ${titleRow}
       ${subHeadRow}
@@ -1470,6 +1517,10 @@ const buildWordHtml = ({
           overflow: hidden;
           word-wrap: break-word;
         }
+        .off-b2-inline-image {
+          padding: 6pt;
+          vertical-align: top;
+        }
         .off-b2-section {
           font-weight: bold;
           text-align: center;
@@ -1492,6 +1543,10 @@ const buildWordHtml = ({
           overflow: hidden;
           word-wrap: break-word;
         }
+        .off-b3-inline-image {
+          padding: 6pt;
+          vertical-align: top;
+        }
         .off-b3-footnote { font-size: 9pt; vertical-align: top; padding: 4pt; }
         .off-diagram-wrap {
           text-align: center;
@@ -1499,6 +1554,9 @@ const buildWordHtml = ({
           max-width: 100%;
           box-sizing: border-box;
           line-height: 0;
+          border: 1.5pt solid ${IMAGE_FRAME_COLOR};
+          border-radius: 10pt;
+          padding: 6pt;
         }
         .off-diagram-wrap img {
           display: block;
@@ -1568,6 +1626,9 @@ const buildWordHtml = ({
           overflow: hidden;
           max-width: 100%;
           box-sizing: border-box;
+          border: 1.5pt solid ${IMAGE_FRAME_COLOR};
+          border-radius: 10pt;
+          padding: 3mm;
         }
         .image-caption { margin-bottom: 2mm; font-weight: 600; }
         .image-wrapper img {
@@ -1591,7 +1652,8 @@ const buildWordHtml = ({
           width: 48%;
           margin: 1%;
           vertical-align: top;
-          border: 1px solid #000;
+          border: 1.5pt solid ${IMAGE_FRAME_COLOR};
+          border-radius: 10pt;
           padding: 3mm;
           page-break-inside: avoid;
         }

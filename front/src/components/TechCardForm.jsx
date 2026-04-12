@@ -22,6 +22,8 @@ const DISPLAY_MODE_NUMBER_ONLY = 'number_only';
 const DISPLAY_MODE_IMAGE_FULL = 'image_full';
 const DISPLAY_MODE_SECTION_HEADER = 'section_header';
 const DISPLAY_MODE_OPERATIONS_ROW = 'operations_row';
+const IMAGE_FRAME_COLOR = '#98785c';
+const INLINE_IMAGE_LAYOUT_BLOCK_IDS = new Set(['2', '3']);
 const PANORAMIC_SCHEME_NAME = 'Панорамное просвечивание кольцевого сварного соединения';
 const DOUBLE_WALL_SCHEME_NAME = 'Кольцевое сварное соединение через две стенки';
 const DISTANCE_PARAM_FRAGMENTS = [
@@ -1887,6 +1889,8 @@ const TechCardForm = () => {
                                 if (isImageParam(param)) {
                                   let imageSrc = resolveImageSrc(param.image || param.value.image);
                                   const isFullImageMode = param.displayMode === DISPLAY_MODE_IMAGE_FULL;
+                                  const usesInlineImageLayout = INLINE_IMAGE_LAYOUT_BLOCK_IDS.has(String(block.id));
+                                  const showImageLabel = !usesInlineImageLayout && !isFullImageMode;
 
                                   if (
                                     imageSrc
@@ -1901,19 +1905,29 @@ const TechCardForm = () => {
                                   const imageRow = (
                                     <tr key={`${compositeKey}-img`} className="border-b border-[#646C89]/20">
                                       <td colSpan={2} className="py-4 px-2">
-                                        {!isFullImageMode && (
+                                        {showImageLabel && (
                                           <div className="text-white text-sm mb-2">
                                             {param.name}
                                           </div>
                                         )}
                                         <div className="flex justify-center">
-                                          <img
-                                            src={imageSrc}
-                                            alt={param.name}
-                                            className={`rounded-lg border border-[#646C89]/30 ${
-                                              isFullImageMode ? 'w-full max-w-4xl object-contain' : 'max-w-full max-h-96'
+                                          <div
+                                            className={`rounded-xl border-2 p-3 ${
+                                              isFullImageMode ? 'w-full max-w-4xl' : 'inline-flex max-w-full'
                                             }`}
-                                          />
+                                            style={{
+                                              borderColor: IMAGE_FRAME_COLOR,
+                                              backgroundColor: 'rgba(143, 185, 150, 0.06)',
+                                            }}
+                                          >
+                                            <img
+                                              src={imageSrc}
+                                              alt={param.name}
+                                              className={`mx-auto ${
+                                                isFullImageMode ? 'w-full max-w-4xl object-contain' : 'max-w-full max-h-96 object-contain'
+                                              }`}
+                                            />
+                                          </div>
                                         </div>
                                       </td>
                                     </tr>
@@ -2036,7 +2050,8 @@ const TechCardForm = () => {
                                 <img
                                   src={image.preview}
                                   alt={image.name}
-                                  className="w-full h-32 object-cover rounded-lg border border-[#646C89]/30"
+                                  className="w-full h-32 object-cover rounded-lg border-2"
+                                  style={{ borderColor: IMAGE_FRAME_COLOR }}
                                 />
                                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
                                   <button

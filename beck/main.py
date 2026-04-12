@@ -37,7 +37,7 @@ from services.Changers.ch_ProtectiveScreenByVoltage import (
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
-DB_DSN = "host=localhost port=5435 dbname=vic user=postgres password=1"
+DB_DSN = "host=localhost port=5432 dbname=victor user=postgres password=admin"
 
 
 def create_pipeline(repos: PostgresDataBase) -> PipeLine:
