@@ -2,7 +2,13 @@ import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from repositories.Interfaces.i_rengen_apparatus_db import IRengenApparatusDB
+from repositories.Interfaces.i_voltage_tube_db import IVoltageTubeDB
 from services.Changers.param_choice import is_scalar_choice
+from services.Changers.xray_max_kv_by_material_table import (
+    filter_rengen_apparatus_rows,
+    format_table_kv_text,
+    max_permissible_kv_for_card,
+)
 from services.Interfaces.i_dataChanger import IDataChanger
 from services.tech_card import TechCardData
 
@@ -378,8 +384,9 @@ class RengenApparatusForPanoramicScheme(IDataChanger[TechCardData]):
     расчётную подсказку для расстояния f.
     """
 
-    def __init__(self, db: IRengenApparatusDB):
+    def __init__(self, db: IRengenApparatusDB, voltage_tube_db: IVoltageTubeDB):
         self._db = db
+        self._vt = voltage_tube_db
 
     def changeData(self, data: TechCardData) -> TechCardData:
         if not data.has_block(BLOCK_SOURCE):
@@ -442,6 +449,8 @@ class RengenApparatusForPanoramicScheme(IDataChanger[TechCardData]):
         if not rows:
             _set_distance_placeholder(data, None)
             return data
+
+        rows = filter_rengen_apparatus_rows(rows, data, self._vt)
 
         allowed_apparatus = _build_allowed_apparatus(
             rows, sensitivity, outer_diameter, inner_diameter
@@ -508,7 +517,7 @@ class RengenApparatusForPanoramicScheme(IDataChanger[TechCardData]):
         _set_or_insert_param(
             data,
             PARAM_VOLTAGE,
-            selected_row.get("voltage_on_tube"),
+            format_table_kv_text(max_permissible_kv_for_card(data, self._vt)),
             9,
             aliases=(ALT_PARAM_VOLTAGE,),
         )

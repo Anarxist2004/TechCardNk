@@ -1,6 +1,12 @@
 from repositories.Interfaces.i_rengen_apparatus_db import IRengenApparatusDB
+from repositories.Interfaces.i_voltage_tube_db import IVoltageTubeDB
 from services.Interfaces.i_dataChanger import IDataChanger
 from services.Changers.param_choice import is_scalar_choice
+from services.Changers.xray_max_kv_by_material_table import (
+    filter_rengen_apparatus_rows,
+    format_table_kv_text,
+    max_permissible_kv_for_card,
+)
 from services.tech_card import TechCardData
 
 
@@ -57,12 +63,25 @@ def _ensure_apparatus_param_name(data: TechCardData) -> str:
 
 class RengenApparatusFromDb(IDataChanger[TechCardData]):
     """
-    Блок «ИСХОДНЫЕ ДАННЫЕ»: загружает список доступных ИИИ из rengen_apparatus,
-    а после выбора аппарата подставляет фокусное пятно и напряжение.
+    Блок «ИСХОДНЫЕ ДАННЫЕ»: список ИИИ из rengen_apparatus; предел кВ из public.voltage_tube —
+    максимально допустимое напряжение: в списке остаются аппараты, у которых макс. кВ трубки
+    не выше этого предела. В «Напряжение …, не более, кВ»
+    пишется предел из voltage_tube (при нехватке данных — 0); из аппарата напряжение не копируем.
     """
 
-    def __init__(self, db: IRengenApparatusDB):
+    def __init__(self, db: IRengenApparatusDB, voltage_tube_db: IVoltageTubeDB):
         self._db = db
+        self._vt = voltage_tube_db
+
+    def _apply_table_voltage_limit(self, data: TechCardData) -> None:
+        s = format_table_kv_text(max_permissible_kv_for_card(data, self._vt))
+        self._set_or_insert_param(
+            data,
+            PARAM_VOLTAGE,
+            s,
+            9,
+            aliases=(ALT_PARAM_VOLTAGE,),
+        )
 
     def _set_or_insert_param(
         self,
@@ -92,6 +111,10 @@ class RengenApparatusFromDb(IDataChanger[TechCardData]):
         if not rows:
             return data
 
+        rows = filter_rengen_apparatus_rows(rows, data, self._vt)
+
+        self._apply_table_voltage_limit(data)
+
         apparatus_names = [
             apparatus_name
             for apparatus_name in (_apparatus_display_value(row) for row in rows)
@@ -112,26 +135,25 @@ class RengenApparatusFromDb(IDataChanger[TechCardData]):
             )
 
         if is_scalar_choice(apparatus_value):
-            apparatus_row = self._db.get_rengen_apparatus_by_name_or_id(
-                str(apparatus_value).strip()
+            key = str(apparatus_value).strip()
+            still_allowed = any(
+                key == str(r.get("id"))
+                or key == (_apparatus_display_value(r) or "")
+                for r in rows
             )
-            if not apparatus_row:
-                return data
+            if still_allowed:
+                apparatus_row = self._db.get_rengen_apparatus_by_name_or_id(key)
+                if not apparatus_row:
+                    return data
 
-            self._set_or_insert_param(
-                data,
-                PARAM_FOCAL_SPOT,
-                apparatus_row.get("focal_spot_size"),
-                8,
-            )
-            self._set_or_insert_param(
-                data,
-                PARAM_VOLTAGE,
-                apparatus_row.get("voltage_on_tube"),
-                9,
-                aliases=(ALT_PARAM_VOLTAGE,),
-            )
-            return data
+                self._set_or_insert_param(
+                    data,
+                    PARAM_FOCAL_SPOT,
+                    apparatus_row.get("focal_spot_size"),
+                    8,
+                )
+                self._apply_table_voltage_limit(data)
+                return data
 
         self._set_or_insert_param(data, PARAM_APPARATUS, apparatus_names, 7)
         data.update_param(

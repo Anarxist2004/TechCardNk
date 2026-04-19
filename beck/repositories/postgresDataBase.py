@@ -11,6 +11,7 @@ from repositories.Interfaces.i_material_standard_db import IMaterialStandardDB
 from repositories.Interfaces.i_rengen_apparatus_db import IRengenApparatusDB
 from repositories.Interfaces.i_radiographic_film_db import IRadiographicFilmDB
 from repositories.Interfaces.i_operation_param_db import IOperationParamDB
+from repositories.Interfaces.i_voltage_tube_db import IVoltageTubeDB
 from services.tech_card import TechCardData
 from typing import Any, Dict, List, Optional, Union
 import psycopg2
@@ -29,6 +30,7 @@ class PostgresDataBase(
     IRengenApparatusDB,
     IRadiographicFilmDB,
     IOperationParamDB,
+    IVoltageTubeDB,
 ):
 
     @staticmethod
@@ -331,6 +333,59 @@ class PostgresDataBase(
         except (psycopg2.Error, TypeError, ValueError) as e:
             print("get_material_standard_id:", e)
             return None
+
+    def get_max_voltage_kv_for_material_and_thickness(
+        self, material_label: str, radiation_thickness_mm: float
+    ) -> float:
+        """
+        public.voltage_tube + type_metall: первая строка с radiation_thickness >= толщине
+        (по возрастанию radiation_thickness); иначе строка с максимальной толщиной.
+        """
+        if not self.cursor:
+            return 0.0
+        try:
+            key = str(material_label or "").strip()
+            if not key or radiation_thickness_mm != radiation_thickness_mm:
+                return 0.0
+            t = float(radiation_thickness_mm)
+            if t < 0:
+                return 0.0
+
+            self.cursor.execute(
+                "SELECT id FROM public.type_metall "
+                "WHERE lower(btrim(material::text)) = lower(btrim(%s::text)) "
+                "LIMIT 1",
+                (key,),
+            )
+            row = self.cursor.fetchone()
+            if not row or row.get("id") is None:
+                return 0.0
+            tid = int(row["id"])
+
+            self.cursor.execute(
+                "SELECT voltage_tube FROM public.voltage_tube "
+                "WHERE type_metall_id = %s AND radiation_thickness IS NOT NULL "
+                "AND radiation_thickness >= %s "
+                "ORDER BY radiation_thickness ASC NULLS LAST LIMIT 1",
+                (tid, t),
+            )
+            hit = self.cursor.fetchone()
+            if hit is not None and hit.get("voltage_tube") is not None:
+                return float(hit["voltage_tube"])
+
+            self.cursor.execute(
+                "SELECT voltage_tube FROM public.voltage_tube "
+                "WHERE type_metall_id = %s AND radiation_thickness IS NOT NULL "
+                "ORDER BY radiation_thickness DESC NULLS LAST LIMIT 1",
+                (tid,),
+            )
+            hit2 = self.cursor.fetchone()
+            if hit2 is not None and hit2.get("voltage_tube") is not None:
+                return float(hit2["voltage_tube"])
+            return 0.0
+        except (psycopg2.Error, TypeError, ValueError) as e:
+            print("get_max_voltage_kv_for_material_and_thickness:", e)
+            return 0.0
 
     def get_rengen_apparatus(self) -> List[Dict[str, Any]]:
         if not self.cursor:
