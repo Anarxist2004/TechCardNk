@@ -91,6 +91,12 @@ function transformBlocksResponse(data) {
           ...(rawSubtitle !== undefined && rawSubtitle !== null && String(rawSubtitle).trim() !== ''
             ? { subtitle: String(rawSubtitle).trim() }
             : {}),
+          ...(Object.prototype.hasOwnProperty.call(param, 'from_welded_joint_params_db')
+            ? { from_welded_joint_params_db: param.from_welded_joint_params_db }
+            : {}),
+          ...(Object.prototype.hasOwnProperty.call(param, 'welded_joint_binding')
+            ? { welded_joint_binding: param.welded_joint_binding }
+            : {}),
           blockId,
           blockName: block.name,
         };
