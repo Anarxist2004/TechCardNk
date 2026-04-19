@@ -10,6 +10,9 @@ from services.Changers.ch_RegulatoryDocumentsFromDb import RegulatoryDocumentsFr
 from services.Changers.ch_TypeOfWeldedJointFromDb import TypeOfWeldedJointFromDb
 from services.Changers.ch_WeldedJointDiagramFromDb import WeldedJointDiagramFromDb
 from services.Changers.ch_ParamsByWeldedJointFromDb import ParamsByWeldedJointFromDb
+from services.Changers.ch_CircButtWeldBeadFromThicknessTable import (
+    CircButtWeldBeadFromThicknessTable,
+)
 from services.Changers.ch_ControlSchemesFromDb import ControlSchemesFromJointTypeDb
 from services.Changers.ch_ControlledZoneWidthStub import ControlledZoneWidthStub
 from services.Changers.ch_ControlSensitivity import ControlSensitivityChanger
@@ -51,6 +54,7 @@ def create_pipeline(repos: PostgresDataBase) -> PipeLine:
     pipe_line.addChanger(MaterialsFromDb(repos), 0)
     pipe_line.addChanger(RengenApparatusFromDb(repos), 0)
     pipe_line.addChanger(ParamsByWeldedJointFromDb(repos), 0)
+    pipe_line.addChanger(CircButtWeldBeadFromThicknessTable(), 0)
     pipe_line.addChanger(ControlSensitivityChanger(), 0)
     pipe_line.addChanger(RengenApparatusForPanoramicScheme(repos), 0)
     pipe_line.addChanger(RengenDistanceForDoubleWallScheme(), 0)
