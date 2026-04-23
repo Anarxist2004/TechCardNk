@@ -16,11 +16,7 @@ class TechCardService(IServise):
     def _apply_operations_from_db(
         self, card: TechCardData, list_id: int = 1
     ) -> None:
-        getter = getattr(self.repos, "get_operation_params_by_list_id", None)
-        if not callable(getter):
-            return
-
-        rows = getter(list_id)
+        rows = self.repos.get_operation_params_by_list_id(list_id)
         if not rows:
             return
 
@@ -254,25 +250,15 @@ class TechCardService(IServise):
     def saveTechCard(
         self, name: str, card_data: dict[str, Any], card_id: int | None = None
     ) -> dict[str, Any]:
-        saver = getattr(self.repos, "save_tech_card_snapshot", None)
-        if not callable(saver):
-            raise RuntimeError("save_tech_card_snapshot is not implemented")
-
         normalized_name = str(name or "").strip() or self._build_default_card_name(
             card_data
         )
-        return saver(normalized_name, card_data, card_id)
+        return self.repos.save_tech_card_snapshot(normalized_name, card_data, card_id)
 
     def listSavedTechCards(self) -> list[dict[str, Any]]:
-        loader = getattr(self.repos, "list_saved_tech_cards", None)
-        if not callable(loader):
-            raise RuntimeError("list_saved_tech_cards is not implemented")
-        return loader()
+        return self.repos.list_saved_tech_cards()
 
     def getSavedTechCard(self, card_id: int) -> dict[str, Any] | None:
-        loader = getattr(self.repos, "get_saved_tech_card", None)
-        if not callable(loader):
-            raise RuntimeError("get_saved_tech_card is not implemented")
-        return loader(card_id)
+        return self.repos.get_saved_tech_card(card_id)
 
 
