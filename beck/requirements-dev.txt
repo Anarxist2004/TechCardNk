@@ -1,0 +1,2 @@
+# Разработка и тестирование (pip install -r requirements-dev.txt)
+pytest>=7.4,<9
