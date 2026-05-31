@@ -120,14 +120,8 @@ function lineEtEnd(e) {
 }
 // подсчет миллиметров в пикселях
 function mmToPx(length) {
-    const selectElement = document.getElementById('etalonValue');
-    let line_mm = 0
-    if (selectElement.value == 1) {
-        line_mm = 30
-    } else if (selectElement.value == 2) {
-        line_mm = 45
-    } else if (selectElement.value == 3) {
-        line_mm = 60
-    }
+    if (!length || length <= 0) return
+
+    const line_mm = getSelectedEtalonLengthMm()
     mmToPx_ratio = line_mm / length
 }

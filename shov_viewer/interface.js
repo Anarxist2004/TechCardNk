@@ -177,11 +177,78 @@ resetZoomBtn.addEventListener('click', function() {
     document.getElementById('status').textContent = `Масштаб: 100%`;
 });
 
-selectorEtalon = document.getElementById('etalonValue');
-selectorEtalon.addEventListener("change", function() {
-    mmToPx(len_etalon)
-    continueDraw()
+const etalonTypeSelect = document.getElementById("etalonType")
+const etalonValueSelect = document.getElementById("etalonValue")
+
+const ETALON_CONFIG = {
+    groove: [
+        { value: "1", label: "1", mm: 30 },
+        { value: "2", label: "2", mm: 45 },
+        { value: "3", label: "3", mm: 60 }
+    ],
+
+    plate: [
+        { value: "1",  label: "1",  mm: 25 },
+        { value: "2",  label: "2",  mm: 25 },
+        { value: "3",  label: "3",  mm: 25 },
+        { value: "4",  label: "4",  mm: 25 },
+        { value: "5",  label: "5",  mm: 25 },
+        { value: "6",  label: "6",  mm: 35 },
+        { value: "7",  label: "7",  mm: 35 },
+        { value: "8",  label: "8",  mm: 35 },
+        { value: "9",  label: "9",  mm: 35 },
+        { value: "10", label: "10", mm: 45 },
+        { value: "11", label: "11", mm: 45 },
+        { value: "12", label: "12", mm: 45 }
+    ],
+
+    wire: [
+        { value: "-", label: "-", mm: 20 }
+    ]
+}
+
+function fillEtalonNumbers() {
+    const selectedType = etalonTypeSelect.value
+    const options = ETALON_CONFIG[selectedType]
+
+    etalonValueSelect.innerHTML = ""
+
+    options.forEach(option => {
+        const el = document.createElement("option")
+        el.value = option.value
+        el.textContent = option.label
+        etalonValueSelect.appendChild(el)
+    })
+}
+
+function getSelectedEtalonLengthMm() {
+    const selectedType = etalonTypeSelect.value
+    const selectedValue = etalonValueSelect.value
+
+    const found = ETALON_CONFIG[selectedType].find(
+        item => String(item.value) === String(selectedValue)
+    )
+
+    return found ? found.mm : 1
+}
+
+etalonTypeSelect.addEventListener("change", () => {
+    fillEtalonNumbers()
+
+    if (len_etalon > 0) {
+        mmToPx(len_etalon)
+        continueDraw({ clientX: mouse_x, clientY: mouse_y })
+    }
 })
+
+etalonValueSelect.addEventListener("change", () => {
+    if (len_etalon > 0) {
+        mmToPx(len_etalon)
+        continueDraw({ clientX: mouse_x, clientY: mouse_y })
+    }
+})
+
+fillEtalonNumbers()
 
 class DropdownManager {
     constructor() {
