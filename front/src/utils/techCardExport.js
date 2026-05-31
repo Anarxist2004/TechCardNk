@@ -1387,6 +1387,40 @@ const buildBlockExportSection = (block, paramValues, customFields, uploadedImage
   return buildGenericBlockHtml(block, paramValues, customFields, uploadedImages, imageSrcMap, paramValues2, imageMetaMap);
 };
 
+const buildApprovalTableHtml = (overview = {}) => {
+  const fullName = escapeHtml(overview.photographerName || '');
+  const organization = [overview.photographerPosition, overview.company]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .join(', ');
+
+  return `
+    <table class="approval-table">
+      <tr>
+        <th></th>
+        <th>ФИО</th>
+        <th>Подпись</th>
+        <th>Должность, организация</th>
+        <th>Уровень квалификации, № удостоверения</th>
+      </tr>
+      <tr>
+        <td>Разработал</td>
+        <td>${fullName}</td>
+        <td></td>
+        <td>${escapeHtml(organization)}</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>Утвердил</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+      </tr>
+    </table>
+  `;
+};
+
 const buildWordHtml = ({
   methodologyName,
   objectName,
@@ -1399,6 +1433,7 @@ const buildWordHtml = ({
   imageSrcMap,
   imageMetaMap = {},
   title,
+  overview = {},
 }) => {
   const metadataRows = [
     methodologyName ? `<div><span>Методика:</span> ${escapeHtml(methodologyName)}</div>` : '',
@@ -1411,6 +1446,7 @@ const buildWordHtml = ({
     .map((block) => buildBlockExportSection(block, paramValues, customFields, uploadedImages, imageSrcMap, paramValues2, imageMetaMap))
     .join('');
   const documentTitle = escapeHtml(title || 'Технологическая карта');
+  const approvalTableHtml = buildApprovalTableHtml(overview);
 
   return `<!doctype html>
   <html lang="ru" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
@@ -1679,6 +1715,27 @@ const buildWordHtml = ({
           color: #444;
           font-size: 9pt;
         }
+        .approval-table {
+          width: 100%;
+          margin-top: 8mm;
+          border-collapse: collapse;
+          page-break-inside: avoid;
+          font-size: 11pt;
+        }
+        .approval-table th,
+        .approval-table td {
+          border: 1px solid #000000;
+          padding: 1.5mm 2mm;
+          vertical-align: middle;
+        }
+        .approval-table th {
+          text-align: center;
+          font-weight: 700;
+        }
+        .approval-table td:first-child {
+          width: 24mm;
+          font-weight: 400;
+        }
       </style>
     </head>
     <body>
@@ -1689,6 +1746,7 @@ const buildWordHtml = ({
             ${metadataRows}
           </section>
           ${blocksHtml}
+          ${approvalTableHtml}
           <div class="export-note">Документ сформирован из текущего состояния техкарты.</div>
         </main>
       </div>
@@ -1733,6 +1791,7 @@ export const exportTechCardToWord = async ({
   customFields = {},
   uploadedImages = {},
   title = 'Технологическая карта',
+  overview = {},
 }) => {
   const { blockImages, blockImageMeta, extraImages } = await prepareExportImages(blocks, uploadedImages);
 
@@ -1748,6 +1807,7 @@ export const exportTechCardToWord = async ({
     imageSrcMap: blockImages,
     imageMetaMap: blockImageMeta,
     title,
+    overview,
   });
 
   const blob = new Blob(['\ufeff', html], {

@@ -1967,6 +1967,7 @@ const TechCardForm = ({ initialSavedCard = null }) => {
         paramValues2,
         customFields,
         uploadedImages,
+        overview,
       });
     } catch (error) {
       console.error('Ошибка экспорта техкарты:', error);
@@ -2570,7 +2571,7 @@ const TechCardForm = ({ initialSavedCard = null }) => {
                 ) : (
                   <>
                     <Download size={22} />
-                    Скачать Word
+                    Скачать
                   </>
                 )}
               </button>
@@ -2596,7 +2597,7 @@ const TechCardForm = ({ initialSavedCard = null }) => {
                 ) : (
                   <>
                     <FileCheck size={24} />
-                    Сформировать карту
+                    Сохранить тех. карту
                   </>
                 )}
               </button>
