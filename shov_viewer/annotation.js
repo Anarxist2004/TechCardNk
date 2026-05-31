@@ -226,29 +226,104 @@ popup_delete_btns()
 function redraw_defects() {
     const defects_div = document.querySelector(".defects")
     defects_div.innerHTML = ""
-    new_inner = ""
-    defects.forEach(element => {
-        new_inner += '<div class="defect" data-defect-id="' + element[2] + '" data-figure="' + element[0] + '"><p>' + element[3] + '</p><p>' + Math.max((element[1][0]).toFixed(2), (element[1][1]).toFixed(2)) + ' × ' + Math.min((element[1][0]).toFixed(2), (element[1][1]).toFixed(2)) + ' мм</p></div>'
-    });
+
+    const grouped = {}
+
+    defects.forEach(defect => {
+        const defectName = defect[3]
+
+        if (!grouped[defectName]) {
+            grouped[defectName] = []
+        }
+
+        grouped[defectName].push(defect)
+    })
+
+    let new_inner = ""
+
+    Object.keys(grouped).forEach(defectName => {
+        const group = grouped[defectName]
+
+        if (group.length === 1) {
+            const defect = group[0]
+            const sizeText = getDefectSizeText(defect)
+
+            new_inner += `
+                <div class="defect defect-single"
+                    data-defect-id="${defect[2]}"
+                    data-figure="${defect[0]}">
+                    <p>${defectName}</p>
+                    <p>${sizeText}</p>
+                </div>
+            `
+        } else {
+            new_inner += `
+                <details class="defect-group">
+                    <summary class="defect-group-header">
+                        <span>${defectName}</span>
+                        <span>${group.length} шт.</span>
+                    </summary>
+
+                    <div class="defect-group-content">
+            `
+
+            group.forEach((defect, index) => {
+                const sizeText = getDefectSizeText(defect)
+
+                new_inner += `
+                    <div class="defect defect-child"
+                        data-defect-id="${defect[2]}"
+                        data-figure="${defect[0]}">
+                        <p>${index + 1}. ${defectName}</p>
+                        <p>${sizeText}</p>
+                    </div>
+                `
+            })
+
+            new_inner += `
+                    </div>
+                </details>
+            `
+        }
+    })
+
     defects_div.innerHTML = new_inner
-    // теперь выставляем обработчик на наведение мыши
-    defects_annotation = document.querySelectorAll(".defect")
-    defects_annotation.forEach(element => {
-        element.addEventListener("mouseenter", () => {
-            flash_measure(element)
+
+    const defectCards = document.querySelectorAll(".defect")
+
+    defectCards.forEach(card => {
+        card.addEventListener("mouseenter", () => {
+            flash_measure(card)
         })
-        element.addEventListener("mouseleave", () => {
+
+        card.addEventListener("mouseleave", () => {
             redraw()
         })
-        element.addEventListener("contextmenu", (e) => {
+
+        card.addEventListener("contextmenu", (e) => {
             e.preventDefault()
-            if (e.button === 2) { 
-                const popup_delete = document.querySelector(".popup_delete_defect")
-                // fixed_element_data = ["", [(element[1][0]).toFixed(2), (element[1][1]).toFixed(2)], element[2]]
-                popup_delete.classList.add("show")
-            }
+
+            const defectId = card.dataset.defectId
+            const defect = defects.find(d => String(d[2]) === String(defectId))
+
+            if (!defect) return
+
+            fixed_element_data = [defect[0], defect[1], defect[2]]
+
+            const popup_delete = document.querySelector(".popup_delete_defect")
+            popup_delete.classList.add("show")
         })
-    });
+    })
+}
+
+function getDefectSizeText(defect) {
+    const width = Number(defect[1][0])
+    const height = Number(defect[1][1])
+
+    const maxSize = Math.max(width, height).toFixed(2)
+    const minSize = Math.min(width, height).toFixed(2)
+
+    return `${maxSize} × ${minSize} мм`
 }
 
 // id дефекта по measure_id
@@ -263,34 +338,41 @@ function search_defect_by_id(m_id) {
 
 // надо подсветить тот дефект, который связан с плашкой при наведении курсора на плашку
 function flash_measure(defect_annotation) {
-    if (defect_annotation.dataset.figure == "ellipse3") {
+    const defectId = defect_annotation.dataset.defectId
+    const figureType = defect_annotation.dataset.figure
+
+    if (figureType == "ellipse3") {
         measureEllipses3.forEach(el => {
+            if (String(el[8]) !== String(defectId)) return
+
             const xA = el[2], yA = el[3]
             const xB = el[4], yB = el[5]
             const xC = el[6], yC = el[7]
 
-            const cx = (xA + xB)/2
-            const cy = (yA + yB)/2
+            const cx = (xA + xB) / 2
+            const cy = (yA + yB) / 2
 
             const dx = xB - xA
             const dy = yB - yA
-            const a = Math.sqrt(dx*dx + dy*dy)/2
+            const a = Math.sqrt(dx * dx + dy * dy) / 2
             const angle = Math.atan2(dy, dx)
 
             const cxC = xC - cx
             const cyC = yC - cy
-            const b = Math.sqrt(cxC*cxC + cyC*cyC)
+            const b = Math.sqrt(cxC * cxC + cyC * cyC)
 
-            if (el[8] == defect_annotation.dataset.defectId) {
-                ctx.beginPath()
-                ctx.ellipse(cx, cy, a, b, angle, 0, 2*Math.PI)
-                ctx.strokeStyle = "#fafafa"
-                ctx.lineWidth = el[1] + 1
-                ctx.stroke()
-            }
-        });
-    } else if (defect_annotation.dataset.figure == "rect") {
+            ctx.beginPath()
+            ctx.ellipse(cx, cy, a, b, angle, 0, 2 * Math.PI)
+            ctx.strokeStyle = "#fafafa"
+            ctx.lineWidth = el[1] + 2
+            ctx.stroke()
+        })
+    }
+
+    else if (figureType == "rect") {
         measureRects.forEach(rect => {
+            if (String(rect[6]) !== String(defectId)) return
+
             const x1 = rect[2]
             const y1 = rect[3]
             const x2 = rect[4]
@@ -304,23 +386,31 @@ function flash_measure(defect_annotation) {
             ctx.beginPath()
             ctx.rect(left, top, right - left, bottom - top)
             ctx.strokeStyle = "#fafafa"
-            ctx.lineWidth = rect[1] + 1
+            ctx.lineWidth = rect[1] + 2
             ctx.stroke()
         })
-    } else if (defect_annotation.dataset.figure == "ellipse") {
+    }
+
+    else if (figureType == "ellipse") {
         measureEllipses.forEach(el => {
-            const x1 = el[2], y1 = el[3], x2 = el[4], y2 = el[5]
-            const rx = Math.abs(x2 - x1)/2
-            const ry = Math.abs(y2 - y1)/2
-            const cx = (x1 + x2)/2
-            const cy = (y1 + y2)/2
+            if (String(el[6]) !== String(defectId)) return
+
+            const x1 = el[2]
+            const y1 = el[3]
+            const x2 = el[4]
+            const y2 = el[5]
+
+            const rx = Math.abs(x2 - x1) / 2
+            const ry = Math.abs(y2 - y1) / 2
+            const cx = (x1 + x2) / 2
+            const cy = (y1 + y2) / 2
 
             ctx.beginPath()
-            ctx.ellipse(cx, cy, rx, ry, 0, 0, 2*Math.PI)
+            ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI)
             ctx.strokeStyle = "#fafafa"
-            ctx.lineWidth = el[1] + 1
+            ctx.lineWidth = el[1] + 2
             ctx.stroke()
-        });
+        })
     }
 }
 
