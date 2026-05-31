@@ -22,6 +22,7 @@ const DISPLAY_MODE_NUMBER_ONLY = 'number_only';
 const DISPLAY_MODE_IMAGE_FULL = 'image_full';
 const DISPLAY_MODE_SECTION_HEADER = 'section_header';
 const DISPLAY_MODE_OPERATIONS_ROW = 'operations_row';
+const OVERVIEW_TAB_ID = 'overview';
 const IMAGE_FRAME_COLOR = '#98785c';
 const INLINE_IMAGE_LAYOUT_BLOCK_IDS = new Set(['2', '3']);
 const PANORAMIC_SCHEME_NAME = 'Панорамное просвечивание кольцевого сварного соединения';
@@ -47,6 +48,13 @@ const DOUBLE_WALL_SCHEME_FRAGMENTS = [
 ];
 
 const createLocalId = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+const createEmptyOverview = () => ({
+  photographerName: '',
+  photographerPosition: '',
+  company: '',
+  weldImages: [],
+});
 
 const normalizeUploadedImagesState = (images) => {
   if (!images || typeof images !== 'object') {
@@ -81,6 +89,42 @@ const buildUploadedImagesForSave = (images) => Object.fromEntries(
     ])
     .filter(([, blockImages]) => blockImages.length > 0),
 );
+
+const normalizeImagesList = (images) => (
+  Array.isArray(images)
+    ? images
+      .filter((image) => image && image.preview)
+      .map((image, index) => ({
+        id: image.id || `image-${index}`,
+        name: image.name || `Изображение ${index + 1}`,
+        preview: image.preview,
+        ...(image.fileName ? { fileName: image.fileName } : {}),
+        ...(image.mimeType ? { mimeType: image.mimeType } : {}),
+      }))
+    : []
+);
+
+const normalizeOverviewState = (overview) => ({
+  ...createEmptyOverview(),
+  ...(overview && typeof overview === 'object' ? overview : {}),
+  weldImages: normalizeImagesList(overview?.weldImages),
+});
+
+const buildOverviewForSave = (overview) => {
+  const normalized = normalizeOverviewState(overview);
+  return {
+    photographerName: normalized.photographerName,
+    photographerPosition: normalized.photographerPosition,
+    company: normalized.company,
+    weldImages: normalized.weldImages.map((image) => ({
+      id: image.id,
+      name: image.name,
+      preview: image.preview,
+      ...(image.fileName ? { fileName: image.fileName } : {}),
+      ...(image.mimeType ? { mimeType: image.mimeType } : {}),
+    })),
+  };
+};
 
 /** Одна вкладка = один блок; id стабилен для выбора активной вкладки. */
 const getBlockTabId = (blockId) => String(blockId);
@@ -1051,6 +1095,7 @@ const TechCardForm = ({ initialSavedCard = null }) => {
   const [collapsedBlocks, setCollapsedBlocks] = useState({});
   const [customFields, setCustomFields] = useState({});
   const [uploadedImages, setUploadedImages] = useState({});
+  const [overview, setOverview] = useState(createEmptyOverview);
   const [standardValuesCache, setStandardValuesCache] = useState({});
   const [savingOptionKey, setSavingOptionKey] = useState(null);
   const [activeTabId, setActiveTabId] = useState('');
@@ -1076,6 +1121,7 @@ const TechCardForm = ({ initialSavedCard = null }) => {
     setCollapsedBlocks({});
     setCustomFields({});
     setUploadedImages({});
+    setOverview(createEmptyOverview());
     setStandardValuesCache({});
     setActiveTabId('');
     setSavedCardId(null);
@@ -1098,13 +1144,13 @@ const TechCardForm = ({ initialSavedCard = null }) => {
     setStandardValuesCache(buildStandardValuesCacheFromBlocks(nextBlocks));
     setActiveTabId((prev) => {
       if (nextTabs.length === 0) {
-        return '';
+        return OVERVIEW_TAB_ID;
       }
       const prevStr = prev != null && prev !== '' ? String(prev) : '';
       if (prevStr && nextTabs.some((t) => String(t.id) === prevStr)) {
         return prevStr;
       }
-      return nextTabs[0].id;
+      return OVERVIEW_TAB_ID;
     });
     setLoadError('');
   };
@@ -1119,6 +1165,7 @@ const TechCardForm = ({ initialSavedCard = null }) => {
     applyLoadedTechCard(savedCard.techCard);
     setCustomFields(savedCard.customFields || {});
     setUploadedImages(normalizeUploadedImagesState(savedCard.uploadedImages));
+    setOverview(normalizeOverviewState(savedCard.overview));
     setSavedCardId(savedCard.id ?? null);
     setCardName(savedCard.cardName || savedCard.name || '');
   };
@@ -1140,6 +1187,7 @@ const TechCardForm = ({ initialSavedCard = null }) => {
       ),
       customFields,
       uploadedImages: buildUploadedImagesForSave(uploadedImages),
+      overview: buildOverviewForSave(overview),
     };
   };
 
@@ -1189,6 +1237,34 @@ const TechCardForm = ({ initialSavedCard = null }) => {
     void loadTechCard();
   }, [initialSavedCard]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCurrentUser = async () => {
+      try {
+        const user = await api.getCurrentUser();
+        if (!isMounted) {
+          return;
+        }
+
+        setOverview((prev) => ({
+          ...prev,
+          photographerName: prev.photographerName || user.full_name || user.username || '',
+          photographerPosition: prev.photographerPosition || user.position || '',
+          company: prev.company || user.company || '',
+        }));
+      } catch (error) {
+        console.error('Ошибка загрузки профиля пользователя:', error);
+      }
+    };
+
+    void loadCurrentUser();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   useEffect(() => () => {
     if (paramSyncTimerRef.current !== null) {
       clearTimeout(paramSyncTimerRef.current);
@@ -1200,8 +1276,8 @@ const TechCardForm = ({ initialSavedCard = null }) => {
     const availableTabs = buildBlockTabs(blocks);
 
     if (availableTabs.length === 0) {
-      if (activeTabId !== '') {
-        setActiveTabId('');
+      if (activeTabId !== OVERVIEW_TAB_ID) {
+        setActiveTabId(OVERVIEW_TAB_ID);
       }
       return;
     }
@@ -1211,7 +1287,7 @@ const TechCardForm = ({ initialSavedCard = null }) => {
       !activeStr
       || !availableTabs.some((tab) => String(tab.id) === activeStr)
     ) {
-      setActiveTabId(availableTabs[0].id);
+      setActiveTabId(OVERVIEW_TAB_ID);
     }
   }, [blocks, activeTabId]);
 
@@ -1278,6 +1354,53 @@ const TechCardForm = ({ initialSavedCard = null }) => {
     setUploadedImages((prev) => ({
       ...prev,
       [blockId]: (prev[blockId] || []).filter((image) => image.id !== imageId),
+    }));
+  };
+
+  const updateOverviewField = (field, value) => {
+    setOverview((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleOverviewImageUpload = (event) => {
+    const files = Array.from(event.target.files || []);
+
+    files.forEach((file) => {
+      if (!file.type.startsWith('image/')) {
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (loadEvent) => {
+        if (!loadEvent.target?.result) {
+          return;
+        }
+
+        setOverview((prev) => ({
+          ...prev,
+          weldImages: [
+            ...normalizeImagesList(prev.weldImages),
+            {
+              id: createLocalId('overview_img'),
+              file,
+              preview: loadEvent.target.result,
+              name: file.name,
+            },
+          ],
+        }));
+      };
+      reader.readAsDataURL(file);
+    });
+
+    event.target.value = '';
+  };
+
+  const deleteOverviewImage = (imageId) => {
+    setOverview((prev) => ({
+      ...prev,
+      weldImages: normalizeImagesList(prev.weldImages).filter((image) => image.id !== imageId),
     }));
   };
 
@@ -1842,10 +1965,14 @@ const TechCardForm = ({ initialSavedCard = null }) => {
 
   const hasBlocks = blocks.length > 0;
   const blockTabs = buildBlockTabs(blocks);
-  const activeBlockTab = blockTabs.find((tab) => tab.id === activeTabId) || blockTabs[0] || null;
+  const isOverviewTabActive = activeTabId === OVERVIEW_TAB_ID;
+  const activeBlockTab = isOverviewTabActive
+    ? null
+    : blockTabs.find((tab) => tab.id === activeTabId) || blockTabs[0] || null;
   const visibleBlocks = activeBlockTab?.block
     ? [activeBlockTab.block]
     : blocks;
+  const overviewImages = normalizeImagesList(overview.weldImages);
 
   return (
     <div className="bg-[#21262F] rounded-2xl p-6 md:p-8">
@@ -1891,6 +2018,22 @@ const TechCardForm = ({ initialSavedCard = null }) => {
             {blockTabs.length > 0 && (
               <div className="overflow-x-auto pb-1">
                 <div className="flex min-w-max gap-2 rounded-xl border border-[#646C89]/20 bg-[#0C1515]/60 p-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTabId(OVERVIEW_TAB_ID)}
+                    className={`min-w-[190px] max-w-[260px] rounded-lg border px-3 py-2.5 text-left transition-all ${isOverviewTabActive ? 'shadow-sm' : 'opacity-80 hover:opacity-100'}`}
+                    style={{
+                      borderColor: isOverviewTabActive ? 'var(--nk-accent-primary)' : 'rgba(138, 131, 119, 0.18)',
+                      backgroundColor: isOverviewTabActive ? 'var(--nk-accent-primary-soft)' : 'rgba(12, 21, 21, 0.18)',
+                    }}
+                  >
+                    <div className="text-sm font-semibold leading-snug" style={{ color: isOverviewTabActive ? 'var(--nk-text-primary)' : 'var(--nk-text-secondary)' }}>
+                      Основная информация
+                    </div>
+                    <div className="mt-2 text-[11px]" style={{ color: 'var(--nk-text-muted)' }}>
+                      Снимки и автор
+                    </div>
+                  </button>
                   {blockTabs.map((tab) => {
                     const { block: tabBlock } = tab;
                     const isActiveTab = tab.id === activeBlockTab?.id;
@@ -1947,7 +2090,91 @@ const TechCardForm = ({ initialSavedCard = null }) => {
               </div>
             )}
 
-            {visibleBlocks.map((block, blockIndex) => {
+            {isOverviewTabActive && (
+              <div className="bg-[#0C1515]/50 rounded-xl p-5">
+                <h3 className="text-lg font-semibold text-white mb-4">Основная информация</h3>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <label className="block">
+                    <span className="mb-2 block text-sm text-[#646C89]">ФИО автора снимка</span>
+                    <input
+                      type="text"
+                      value={overview.photographerName}
+                      onChange={(event) => updateOverviewField('photographerName', event.target.value)}
+                      className="w-full rounded-lg border border-[#646C89]/50 bg-[#0C1515] px-3 py-2 text-sm text-white placeholder-[#646C89] focus:border-[#D97B54] focus:outline-none"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-2 block text-sm text-[#646C89]">Должность</span>
+                    <input
+                      type="text"
+                      value={overview.photographerPosition}
+                      onChange={(event) => updateOverviewField('photographerPosition', event.target.value)}
+                      className="w-full rounded-lg border border-[#646C89]/50 bg-[#0C1515] px-3 py-2 text-sm text-white placeholder-[#646C89] focus:border-[#D97B54] focus:outline-none"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-2 block text-sm text-[#646C89]">Компания</span>
+                    <input
+                      type="text"
+                      value={overview.company}
+                      onChange={(event) => updateOverviewField('company', event.target.value)}
+                      className="w-full rounded-lg border border-[#646C89]/50 bg-[#0C1515] px-3 py-2 text-sm text-white placeholder-[#646C89] focus:border-[#D97B54] focus:outline-none"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-5 border-t border-[#646C89]/30 pt-5">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <h4 className="text-sm font-semibold text-white">Снимки сварного шва</h4>
+                    <label className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-[#D97B54] transition-colors hover:bg-[#D97B54]/10">
+                      <Image size={16} />
+                      Добавить снимки
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleOverviewImageUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {overviewImages.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                      {overviewImages.map((image) => (
+                        <div key={image.id} className="relative group">
+                          <img
+                            src={image.preview}
+                            alt={image.name}
+                            className="h-36 w-full rounded-lg border-4 object-cover"
+                            style={{ borderColor: IMAGE_FRAME_COLOR }}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                            <button
+                              type="button"
+                              onClick={() => deleteOverviewImage(image.id)}
+                              className="rounded-full bg-red-500 p-2 text-white transition-colors hover:bg-red-600"
+                              title="Удалить снимок"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                          <p className="mt-1 truncate text-xs text-[#646C89]" title={image.name}>
+                            {image.name}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-lg border border-[#646C89]/20 bg-[#0C1515]/40 px-4 py-6 text-center text-sm text-[#646C89]">
+                      Снимки пока не добавлены
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {!isOverviewTabActive && visibleBlocks.map((block, blockIndex) => {
               const isCollapsed = collapsedBlocks[block.id];
               const isComplete = isBlockComplete(block);
               const progress = getBlockProgress(block);

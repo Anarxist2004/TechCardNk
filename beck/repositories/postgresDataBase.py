@@ -436,29 +436,37 @@ class PostgresDataBase(
             return []
 
     def save_tech_card_snapshot(
-        self, name: str, card_data: Dict[str, Any], card_id: Optional[int] = None
+        self,
+        name: str,
+        card_data: Dict[str, Any],
+        card_id: Optional[int] = None,
+        user_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         if not self.cursor:
             raise RuntimeError("Database cursor is not initialized")
 
         try:
+            self.cursor.execute(
+                "ALTER TABLE IF EXISTS public.tech_cards "
+                "ADD COLUMN IF NOT EXISTS user_id bigint"
+            )
             row = None
             if card_id is not None:
                 self.cursor.execute(
                     "UPDATE public.tech_cards "
-                    "SET name = %s, card_data = %s, updated_at = NOW() "
+                    "SET name = %s, card_data = %s, user_id = COALESCE(%s, user_id), updated_at = NOW() "
                     "WHERE id = %s "
                     "RETURNING id, name, created_at, updated_at",
-                    (name, Json(card_data), card_id),
+                    (name, Json(card_data), user_id, card_id),
                 )
                 row = self.cursor.fetchone()
 
             if row is None:
                 self.cursor.execute(
-                    "INSERT INTO public.tech_cards (name, card_data) "
-                    "VALUES (%s, %s) "
+                    "INSERT INTO public.tech_cards (name, card_data, user_id) "
+                    "VALUES (%s, %s, %s) "
                     "RETURNING id, name, created_at, updated_at",
-                    (name, Json(card_data)),
+                    (name, Json(card_data), user_id),
                 )
                 row = self.cursor.fetchone()
 

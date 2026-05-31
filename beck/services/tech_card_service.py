@@ -248,12 +248,21 @@ class TechCardService(IServise):
         )
 
     def saveTechCard(
-        self, name: str, card_data: dict[str, Any], card_id: int | None = None
+        self,
+        name: str,
+        card_data: dict[str, Any],
+        card_id: int | None = None,
+        user_id: int | None = None,
     ) -> dict[str, Any]:
         normalized_name = str(name or "").strip() or self._build_default_card_name(
             card_data
         )
-        return self.repos.save_tech_card_snapshot(normalized_name, card_data, card_id)
+        return self.repos.save_tech_card_snapshot(
+            normalized_name,
+            card_data,
+            card_id,
+            user_id,
+        )
 
     def listSavedTechCards(self) -> list[dict[str, Any]]:
         return self.repos.list_saved_tech_cards()

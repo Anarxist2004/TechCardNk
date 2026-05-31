@@ -46,4 +46,67 @@ CREATE INDEX IF NOT EXISTS sessions_user_id_idx
 CREATE INDEX IF NOT EXISTS sessions_expires_at_idx
     ON public.sessions USING btree (expires_at);
 
+ALTER TABLE IF EXISTS public.tech_cards
+    ADD COLUMN IF NOT EXISTS user_id bigint;
+
+DO $$
+BEGIN
+    IF to_regclass('public.tech_cards') IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'tech_cards_user_id_fkey'
+    ) THEN
+        ALTER TABLE public.tech_cards
+            ADD CONSTRAINT tech_cards_user_id_fkey FOREIGN KEY (user_id)
+            REFERENCES public.users (id) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE SET NULL;
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS tech_cards_user_id_idx
+    ON public.tech_cards USING btree (user_id);
+
+CREATE TABLE IF NOT EXISTS public.tech_card_images
+(
+    id bigserial NOT NULL,
+    tech_card_id bigint NOT NULL,
+    image_url text COLLATE pg_catalog."default" NOT NULL,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT tech_card_images_pkey PRIMARY KEY (id),
+    CONSTRAINT tech_card_images_tech_card_id_fkey FOREIGN KEY (tech_card_id)
+        REFERENCES public.tech_cards (id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS tech_card_images_tech_card_id_idx
+    ON public.tech_card_images USING btree (tech_card_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS tech_card_images_card_url_idx
+    ON public.tech_card_images USING btree (tech_card_id, image_url);
+
+CREATE TABLE IF NOT EXISTS public.tech_card_image_descriptions
+(
+    id bigserial NOT NULL,
+    image_id bigint NOT NULL,
+    user_id bigint,
+    description text COLLATE pg_catalog."default" NOT NULL,
+    is_ai_generated boolean NOT NULL DEFAULT false,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT tech_card_image_descriptions_pkey PRIMARY KEY (id),
+    CONSTRAINT tech_card_image_descriptions_image_id_fkey FOREIGN KEY (image_id)
+        REFERENCES public.tech_card_images (id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE CASCADE,
+    CONSTRAINT tech_card_image_descriptions_user_id_fkey FOREIGN KEY (user_id)
+        REFERENCES public.users (id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS tech_card_image_descriptions_image_id_idx
+    ON public.tech_card_image_descriptions USING btree (image_id);
+
+CREATE INDEX IF NOT EXISTS tech_card_image_descriptions_user_id_idx
+    ON public.tech_card_image_descriptions USING btree (user_id);
+
 COMMIT;

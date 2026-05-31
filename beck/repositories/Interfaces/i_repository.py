@@ -15,7 +15,11 @@ class IRepository(ABC, Generic[T]):
 
     @abstractmethod
     def save_tech_card_snapshot(
-        self, name: str, card_data: Dict[str, Any], card_id: Optional[int] = None
+        self,
+        name: str,
+        card_data: Dict[str, Any],
+        card_id: Optional[int] = None,
+        user_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Сохранить снапшот техкарты (insert/update)."""
         pass

@@ -19,9 +19,13 @@ class ControllerWeb(IControllers[TechCardData]):
         return self.serv.updateTechCard(data)
 
     def saveTechCard(
-        self, name: str, card_data: dict[str, Any], card_id: int | None = None
+        self,
+        name: str,
+        card_data: dict[str, Any],
+        card_id: int | None = None,
+        user_id: int | None = None,
     ) -> dict[str, Any]:
-        return self.serv.saveTechCard(name, card_data, card_id)
+        return self.serv.saveTechCard(name, card_data, card_id, user_id)
 
     def listSavedTechCards(self) -> list[dict[str, Any]]:
         return self.serv.listSavedTechCards()

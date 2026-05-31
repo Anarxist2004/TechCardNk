@@ -127,6 +127,22 @@ function normalizeSavedUploadedImages(uploadedImages) {
   );
 }
 
+function normalizeSavedImagesList(images) {
+  if (!Array.isArray(images)) {
+    return [];
+  }
+
+  return images
+    .filter((image) => image && image.preview)
+    .map((image, index) => ({
+      id: image.id || `overview-saved-${index}`,
+      name: image.name || `Изображение ${index + 1}`,
+      preview: image.preview,
+      fileName: image.fileName || null,
+      mimeType: image.mimeType || null,
+    }));
+}
+
 function transformSavedTechCardResponse(data) {
   if (!data) {
     return null;
@@ -147,6 +163,14 @@ function transformSavedTechCardResponse(data) {
       ? snapshot.customFields
       : {},
     uploadedImages: normalizeSavedUploadedImages(snapshot.uploadedImages),
+    overview: snapshot.overview && typeof snapshot.overview === 'object'
+      ? {
+        photographerName: snapshot.overview.photographerName || '',
+        photographerPosition: snapshot.overview.photographerPosition || '',
+        company: snapshot.overview.company || '',
+        weldImages: normalizeSavedImagesList(snapshot.overview.weldImages),
+      }
+      : null,
   };
 }
 
@@ -168,6 +192,14 @@ const api = {
   },
 
   saveTechCard: (payload) => postRequest('saveTechCard', payload),
+
+  getCurrentUser: () => fetch('/api/auth/me', { credentials: 'same-origin' }).then(async (response) => {
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.detail || 'Ошибка загрузки пользователя');
+    }
+    return data;
+  }),
 
   listSavedTechCards: async () => {
     const data = await postRequest('listSavedTechCards', {});

@@ -18,7 +18,11 @@ class IControllers(ABC, Generic[T]):
 
     @abstractmethod
     def saveTechCard(
-        self, name: str, card_data: dict[str, Any], card_id: int | None = None
+        self,
+        name: str,
+        card_data: dict[str, Any],
+        card_id: int | None = None,
+        user_id: int | None = None,
     ) -> dict[str, Any]:
         pass
 

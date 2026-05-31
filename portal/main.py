@@ -5,6 +5,8 @@ import hmac
 import importlib.util
 import json
 import os
+import base64
+import re
 import secrets
 import sys
 import traceback
@@ -26,6 +28,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 PORTAL_DIR = Path(__file__).resolve().parent
 PORTAL_STATIC_DIR = PORTAL_DIR / "static"
 GENERATED_DIR = PORTAL_DIR / "generated"
+TECH_CARD_IMAGE_DIR = GENERATED_DIR / "tech-card-images"
 
 BECK_DIR = ROOT_DIR / "beck"
 EXPERT_DIR = ROOT_DIR / "shov_viewer"
@@ -43,6 +46,7 @@ for module_dir in (str(BECK_DIR), str(EXPERT_PY_DIR)):
 SESSION_COOKIE = "nk_session"
 SESSION_DAYS = 7
 PBKDF2_ITERATIONS = 260_000
+DATA_URL_RE = re.compile(r"^data:(?P<mime>[-\w.]+/[-\w.+]+);base64,(?P<data>.+)$", re.DOTALL)
 
 
 class AuthPayload(BaseModel):
@@ -73,6 +77,7 @@ def db_connect():
 
 def init_auth_db() -> None:
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+    TECH_CARD_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
     with db_connect() as conn:
         with conn.cursor() as cursor:
             cursor.execute(
@@ -108,8 +113,52 @@ def init_auth_db() -> None:
             cursor.execute("ALTER TABLE public.users ADD COLUMN IF NOT EXISTS position text NOT NULL DEFAULT ''")
             cursor.execute("ALTER TABLE public.users ADD COLUMN IF NOT EXISTS company text NOT NULL DEFAULT ''")
             cursor.execute("ALTER TABLE public.users ADD COLUMN IF NOT EXISTS updated_at timestamp with time zone NOT NULL DEFAULT now()")
+            cursor.execute("ALTER TABLE IF EXISTS public.tech_cards ADD COLUMN IF NOT EXISTS user_id bigint")
+            cursor.execute(
+                """
+                DO $$
+                BEGIN
+                    IF to_regclass('public.tech_cards') IS NOT NULL AND NOT EXISTS (
+                        SELECT 1 FROM pg_constraint WHERE conname = 'tech_cards_user_id_fkey'
+                    ) THEN
+                        ALTER TABLE public.tech_cards
+                        ADD CONSTRAINT tech_cards_user_id_fkey
+                            FOREIGN KEY (user_id)
+                            REFERENCES public.users (id)
+                            ON DELETE SET NULL;
+                    END IF;
+                END $$;
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS public.tech_card_images (
+                    id bigserial PRIMARY KEY,
+                    tech_card_id bigint NOT NULL REFERENCES public.tech_cards (id) ON DELETE CASCADE,
+                    image_url text NOT NULL,
+                    created_at timestamp with time zone NOT NULL DEFAULT now()
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS public.tech_card_image_descriptions (
+                    id bigserial PRIMARY KEY,
+                    image_id bigint NOT NULL REFERENCES public.tech_card_images (id) ON DELETE CASCADE,
+                    user_id bigint REFERENCES public.users (id) ON DELETE SET NULL,
+                    description text NOT NULL,
+                    is_ai_generated boolean NOT NULL DEFAULT false,
+                    created_at timestamp with time zone NOT NULL DEFAULT now()
+                )
+                """
+            )
             cursor.execute("CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON public.sessions (user_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON public.sessions (expires_at)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS tech_cards_user_id_idx ON public.tech_cards (user_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS tech_card_images_tech_card_id_idx ON public.tech_card_images (tech_card_id)")
+            cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS tech_card_images_card_url_idx ON public.tech_card_images (tech_card_id, image_url)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS tech_card_image_descriptions_image_id_idx ON public.tech_card_image_descriptions (image_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS tech_card_image_descriptions_user_id_idx ON public.tech_card_image_descriptions (user_id)")
             cursor.execute(
                 "DELETE FROM public.sessions WHERE expires_at <= %s",
                 (utc_now(),),
@@ -360,6 +409,10 @@ def me(user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
     }
 
 
+GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+TECH_CARD_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+
 @lru_cache(maxsize=1)
 def get_tech_controller():
     from controllers.controllerWeb import ControllerWeb
@@ -430,6 +483,127 @@ def serialize_techcard_response(value: Any) -> Any:
     return value
 
 
+def get_image_extension(mime_type: str) -> str:
+    return {
+        "image/jpeg": ".jpg",
+        "image/jpg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+        "image/gif": ".gif",
+        "image/bmp": ".bmp",
+    }.get(mime_type.lower(), ".png")
+
+
+def persist_data_url_image(image: dict[str, Any], card_slug: str, scope: str) -> dict[str, Any]:
+    preview = image.get("preview")
+    if not isinstance(preview, str):
+        return image
+
+    match = DATA_URL_RE.match(preview)
+    if not match:
+        return image
+
+    mime_type = match.group("mime")
+    extension = get_image_extension(mime_type)
+    filename = f"{card_slug}_{scope}_{secrets.token_hex(8)}{extension}"
+    filepath = TECH_CARD_IMAGE_DIR / filename
+
+    try:
+        filepath.write_bytes(base64.b64decode(match.group("data"), validate=True))
+    except (ValueError, base64.binascii.Error) as exc:
+        raise HTTPException(status_code=400, detail="Invalid image payload") from exc
+
+    saved_image = dict(image)
+    saved_image.pop("preview", None)
+    saved_image["fileName"] = filename
+    saved_image["preview"] = f"/tech-card-images/{filename}"
+    saved_image["mimeType"] = mime_type
+    return saved_image
+
+
+def collect_tech_card_image_urls(snapshot: Any) -> list[str]:
+    if not isinstance(snapshot, dict):
+        return []
+
+    urls: list[str] = []
+
+    uploaded_images = snapshot.get("uploadedImages")
+    if isinstance(uploaded_images, dict):
+        for images in uploaded_images.values():
+            if isinstance(images, list):
+                for image in images:
+                    if isinstance(image, dict) and isinstance(image.get("preview"), str):
+                        urls.append(image["preview"])
+
+    overview = snapshot.get("overview")
+    if isinstance(overview, dict) and isinstance(overview.get("weldImages"), list):
+        for image in overview["weldImages"]:
+            if isinstance(image, dict) and isinstance(image.get("preview"), str):
+                urls.append(image["preview"])
+
+    return list(dict.fromkeys(urls))
+
+
+def sync_tech_card_image_rows(card_id: int, image_urls: list[str]) -> None:
+    with db_connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM public.tech_card_images WHERE tech_card_id = %s AND image_url <> ALL(%s)",
+                (card_id, image_urls or [""]),
+            )
+            for image_url in image_urls:
+                cursor.execute(
+                    """
+                    INSERT INTO public.tech_card_images (tech_card_id, image_url)
+                    VALUES (%s, %s)
+                    ON CONFLICT (tech_card_id, image_url) DO NOTHING
+                    """,
+                    (card_id, image_url),
+                )
+
+
+def persist_images_map(images_by_key: Any, card_slug: str, scope_prefix: str) -> dict[str, Any]:
+    if not isinstance(images_by_key, dict):
+        return {}
+
+    result: dict[str, Any] = {}
+    for key, images in images_by_key.items():
+        if not isinstance(images, list):
+            continue
+        saved_images = []
+        for index, image in enumerate(images):
+            if isinstance(image, dict):
+                saved_images.append(persist_data_url_image(image, card_slug, f"{scope_prefix}-{key}-{index}"))
+        if saved_images:
+            result[str(key)] = saved_images
+    return result
+
+
+def prepare_tech_card_snapshot_for_save(snapshot: Any, card_id: Any = None) -> dict[str, Any]:
+    if not isinstance(snapshot, dict):
+        return {}
+
+    card_slug = str(card_id or secrets.token_hex(6))
+    prepared = dict(snapshot)
+    prepared["uploadedImages"] = persist_images_map(
+        prepared.get("uploadedImages", {}),
+        card_slug,
+        "block",
+    )
+
+    overview = prepared.get("overview")
+    if isinstance(overview, dict):
+        prepared_overview = dict(overview)
+        prepared_overview["weldImages"] = persist_images_map(
+            {"overview": prepared_overview.get("weldImages", [])},
+            card_slug,
+            "overview",
+        ).get("overview", [])
+        prepared["overview"] = prepared_overview
+
+    return prepared
+
+
 def extract_multipart_file(body: bytes, content_type: str) -> bytes:
     marker = "boundary="
     if marker not in content_type:
@@ -479,11 +653,19 @@ async def techcard_adapter(
         elif control_type == "updateTechCard":
             tech_card = controller.updateTechCard(request_payload.get("techCard", {}))
         elif control_type == "saveTechCard":
-            tech_card = controller.saveTechCard(
-                request_payload.get("name", ""),
+            prepared_data = prepare_tech_card_snapshot_for_save(
                 request_payload.get("data", {}),
                 request_payload.get("id"),
             )
+            tech_card = controller.saveTechCard(
+                request_payload.get("name", ""),
+                prepared_data,
+                request_payload.get("id"),
+                _user.get("id"),
+            )
+            saved_card_id = safe_int(tech_card.get("id") if isinstance(tech_card, dict) else None, 0)
+            if saved_card_id > 0:
+                sync_tech_card_image_rows(saved_card_id, collect_tech_card_image_urls(prepared_data))
         elif control_type == "listSavedTechCards":
             tech_card = controller.listSavedTechCards()
         elif control_type == "getSavedTechCard":
@@ -626,6 +808,7 @@ def expert_analysis_redirect(_user: dict[str, Any] = Depends(require_user)):
 
 
 app.mount("/portal-static", StaticFiles(directory=str(PORTAL_STATIC_DIR)), name="portal-static")
+app.mount("/tech-card-images", StaticFiles(directory=str(TECH_CARD_IMAGE_DIR)), name="tech-card-images")
 
 if FRONT_DIST_DIR.exists():
     app.mount("/tech-cards", StaticFiles(directory=str(FRONT_DIST_DIR), html=True), name="tech-cards")
