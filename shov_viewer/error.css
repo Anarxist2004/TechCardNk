@@ -1,0 +1,20 @@
+html {
+    background: #21262F; /* черный */
+}
+
+.error {
+    font-family: arial;
+    color: #fff;
+    font-size: 24px;
+    font-weight: 700;
+    margin: 20px;
+}
+
+.href {
+    font-family: arial;
+    color: #89bcff;
+    font-size: 24px;
+    font-weight: 700;
+    margin: 20px;
+    text-decoration: underline;
+}

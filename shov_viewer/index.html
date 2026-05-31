@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Просмотрщик с рисованием</title>
+    <link rel="stylesheet" href="./style.css">  
+    <!-- JS scripts -->
+    <script src="./interface.js" defer></script>
+    <!-- JS figures -->
+    <script src="./figures/measureRect.js" defer></script>
+    <script src="./figures/line.js" defer></script>
+    <script src="./figures/ruler.js" defer></script>
+    <script src="./figures/line_etalon.js" defer></script>
+    <script src="./figures/rectangle.js" defer></script>
+    <script src="./figures/ellipse.js" defer></script>
+    <script src="./figures/ellipse3.js" defer></script>
+    <script src="./figures/measureEllipse.js" defer></script>
+    <script src="./figures/measureEllipse3.js" defer></script>
+    <script src="./figures/shov.js" defer></script>
+    <!-- перемещение -->
+    <script src="./drag.js" defer></script>
+    <!-- JS main -->
+    <script src="./index.js" defer></script>
+    <!-- поисковик шва -->
+    <script src="./shov_finder.js" defer></script>
+    <!-- сохранение аннотаций -->
+    <script src="./annotation.js" defer></script>
+    <script src="./defect_namer.js" defer></script>
+    <!-- Комментарии -->
+    <script src="./figures/comments.js" defer></script>  
+</head>
+<div id="commentTooltip"></div>
+<body >
+    <div class="viewer">
+        <div class="tools">
+            <div class="tools-back">
+                <input type="file" id="fileInput" class="file-input" accept="image/*">
+                <label for="fileInput" class="tool-btn">Загрузить изображение</label>
+                <div class="tool-panel">
+                    <label for="etalonValue" class="tool-label">Эталон:</label>
+                    <select id="etalonValue" class="tool-select">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                    </select>
+                </div>
+                <div class="dropdown">
+                    <button class="tool-btn dropdown-btn" id="figureDropdown">Эталоны ↓</button>
+                    <div class="dropdown-content">
+                        <div class="dropdown-item" data-tool="line_etalon">Эталонная линия</div>
+                    </div>
+                </div>
+                <div class="dropdown">
+                    <button class="tool-btn dropdown-btn" id="figureDropdown">Фигуры ↓</button>
+                    <div class="dropdown-content">
+                        <div class="dropdown-item" data-tool="line">Линия</div>
+                        <div class="dropdown-item" data-tool="rectangle">Прямоугольник</div>
+                        <div class="dropdown-item" data-tool="ellipse">Эллипс</div>
+                        <div class="dropdown-item" data-tool="ellipse3">Эллипс 3</div>
+                    </div>
+                </div>
+                <div class="dropdown">
+                    <button class="tool-btn dropdown-btn" id="figureDropdown">Инструменты для шва ↓</button>
+                    <div class="dropdown-content">
+                        <div class="dropdown-item find_shov" data-tool="find_shov">Построить шов</div>
+                        <div class="dropdown-item delete_shov" data-tool="find_shov">Удаление шва</div>
+
+                    </div>
+                </div>
+                <div class="dropdown">
+                    <button class="tool-btn dropdown-btn" id="figureDropdown">Измерительные фигуры ↓</button>
+                    <div class="dropdown-content">
+                        <div class="dropdown-item" data-tool="ruler">Линейка</div>
+                        <div class="dropdown-item" data-tool="measureRect">Изм. прямоугольник</div>
+                        <div class="dropdown-item" data-tool="measureEllipse">Изм. элипс</div>
+                        <div class="dropdown-item" data-tool="measureEllipse3">Изм. элипс 3</div>
+                    </div>
+                </div>
+
+                <div class="bc-wrapper">
+                    <button class="tool-btn" id="bcBtn">Яркость/Контрастность</button>
+
+                    <div id="bcPanel" class="bc-panel hidden">
+                        <label class="brightness">
+                            Яркость: 
+                            <input type="number" id="brightnessValue" min="-100" max="100" value="0">
+                        </label>
+                        <input type="range" id="brightnessSlider" min="-100" max="100" value="0">
+
+                        <label class="brightness">
+                            Контраст: 
+                            <input type="number" id="contrastValue" min="-100" max="100" value="0">
+                        </label>
+                        <input type="range" id="contrastSlider" min="-100" max="100" value="0">
+
+                        <button id="resetBC" class="tool-btn">Сброс</button>
+                    </div>
+                </div>
+                <div>
+                    <button class="tool-btn" data-tool="comment">Комментарий</button>
+                </div>
+                <div>
+                    <input type="color" id="colorPicker" class="color-picker" value="#ff0000">
+                    
+                    <input type="range" id="sizeSlider" class="size-slider" min="1" max="20" value="3">
+                    <span id="sizeValue">3px</span>
+                </div>
+                <p style="display: block; width: 100%;">
+                <button class="tool-btn" id="deleteBtn">Удалить</button>
+                <button class="tool-btn" id="clearBtn">Очистить</button>
+                <button class="tool-btn" id="saveBtn">Сохранить</button>
+                <input type="file" id="annotationJSONInput" style="display: none;"> <!-- инпут для загрузки JSON файла аннотации-->
+                <button class="tool-btn" id="loadBtn">Загрузить</button>
+                
+                <button class="tool-btn" id="zoomIn">+</button>
+                <button class="tool-btn" id="zoomOut">-</button>
+                <button class="tool-btn" id="resetZoom">100%</button>
+            </div>
+        </div>
+        
+        <div class="canvas-container">
+            <canvas id="canvas"></canvas>
+        </div>
+        
+        <div class="info">
+            <div id="status">Загрузите изображение или начните рисовать</div>
+        </div>
+    </div>
+    <div class="annotation">
+        <div class="annotation-left">
+            <div class="defects"></div>
+            <div class="comments"></div>
+        </div>
+        <div class="annotation-right">
+            <textarea id="globalAnnotation" maxlength="3000" placeholder="Комментарий..."></textarea>
+        </div>
+    </div>
+    <div class="popup_add_defect">
+        <p>Добавить дефект</p>
+        <select name="defects" id="defect_selector" class="popup_selector">
+            <option value="Пора">Пора</option>
+            <option value="Трещина" style="background: #686868;">Трещина</option>
+            <option value="Трещина вдоль шва" style="background: #686868;">Трещина вдоль шва</option>
+            <option value="Трещина поперек шва" style="background: #686868;">Трещина поперек шва</option>
+            <option value="Трещина разветвленная" style="background: #686868;">Трещина разветвленная</option>
+            <option value="Шлаковые включения">Шлаковые включения</option>
+            <option value="Вольфрамовые включения">Вольфрамовые включения</option>
+            <option value="Непровар" style="background: #686868;">Непровар</option>
+            <option value="Непровар в корне" style="background: #686868;">Непровар в корне</option>
+            <option value="Непровар между валиками" style="background: #686868;">Непровар между валиками</option>
+            <option value="Непровар по разделке" style="background: #686868;">Непровар по разделке</option>
+            <option value="Окисные включения">Окисные включения</option>
+            <option value="Смещение кромок">Смещение кромок</option>
+        </select>
+        <div class="popup_btns">
+            <div class="btn_ok popup_btn">Готово</div>
+            <div class="btn_cancel popup_btn">Отмена</div>
+        </div>
+    </div>
+    <div class="popup_delete_defect">
+        <p>Редактировать дефект</p>
+        <select name="defects" id="defect_selector2" class="popup_selector">
+            <option value="Пора">Пора</option>
+            <option value="Трещина" style="background: #686868;">Трещина</option>
+            <option value="Трещина вдоль шва" style="background: #686868;">Трещина вдоль шва</option>
+            <option value="Трещина поперек шва" style="background: #686868;">Трещина поперек шва</option>
+            <option value="Трещина разветвленная" style="background: #686868;">Трещина разветвленная</option>
+            <option value="Шлаковые включения">Шлаковые включения</option>
+            <option value="Вольфрамовые включения">Вольфрамовые включения</option>
+            <option value="Непровар" style="background: #686868;">Непровар</option>
+            <option value="Непровар в корне" style="background: #686868;">Непровар в корне</option>
+            <option value="Непровар между валиками" style="background: #686868;">Непровар между валиками</option>
+            <option value="Непровар по разделке" style="background: #686868;">Непровар по разделке</option>
+            <option value="Окисные включения">Окисные включения</option>
+            <option value="Смещение кромок">Смещение кромок</option>
+        </select>
+        <div class="popup_btns">
+            <div class="btn_ok2 popup_btn">Готово</div>
+            <div class="btn_cancel2 popup_btn" style="margin: 0 10px;">Отмена</div>
+            <div class="btn_delete2 popup_btn">Удалить</div>
+        </div>
+    </div>
+    <div class="popup_save">
+        <p>Лаборатория неразрушающего контроля лабораторного комплекса «ТехноПрогресс»</p>
+        <br>
+        <p class="center">Протокол №1 от 20.04.2026 г.</p>
+        <p class="center">проверки сварных стыков <input type="text" id="object_name" value="газопровода" class="popup_save_input"> радиографическим методом</p>
+        <br>
+        <p>
+            Произведена проверка сварных стыков <input type="text" id="object_name_2" value="магистрального трубопровода высокого давления" class="popup_save_input">, стоящего по адресу:
+            <br><input type="text" id="address" value="">.
+        </p>
+        <br>
+        <p><input type="text" id="made_of" value="Газопровод сварен из труб сваркой P с наружным диаметром 820мм, толщиной стенки 10мм." style="text-align:left" class="popup_save_input"></p>
+        <br>
+        <p>
+            Оценка качества сварных соединений проводилась в соответствии с требованиями ГОСТ 23055-78.
+            <br>Контроль проводился по методике в соответствии с требованиями ГОСТ 7512-82.
+        </p>
+        <br>
+        <p class="center">Результаты проверки</p>
+        <br>
+        <table id="defectsTable"></table>
+        <br>
+        <p>Заключение лаборатории: <input type="text" id="lab_conclusion" style="min-width: 250px !important; text-align: left;" class="popup_save_input"></p>
+        <br>
+        <div class="container_names_and_date">
+            <div class="names">
+                <div class="container_string_protocol">
+                    <p>Начальник лаборатории <input type="text" id="chief_name" placeholder="Иванов И.И." style="width: 15ch !important;" class="popup_save_input"></p>
+                    <span style="text-decoration: underline; color: gray;">(подпись)</span>
+                </div>
+                <br>
+                <div class="container_string_protocol">
+                    <p>Дефектоскопист <input type="text" id="inspector_name" placeholder="Петров П.П." style="width: 15ch !important;" class="popup_save_input"></p>
+                    <span style="text-decoration: underline; color: gray;">(подпись)</span>
+                </div> 
+            </div>
+            <div class="annotation_date_btm">20.04.2026 г.</div>
+        </div>
+        <br><br>
+        <div class="popup_save_btns">
+            <button id="btn_save_annotation_json" class="popup_save_btn">Сохранить аннотацию</button>
+            <button id="btn_save_protocol_docx" class="popup_save_btn">Сохранить протокол (DOCX)</button>
+            <button id="btn_close_popup_save" class="popup_save_btn">Закрыть</button>
+        </div>  
+    </div>
+</body>
+</html>
