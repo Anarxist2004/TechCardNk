@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Сервис НК сварных соединений</title>
+  <link rel="stylesheet" href="/portal-static/style.css">
+  <script src="/portal-static/app.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <section class="auth-panel" id="authPanel">
+      <div class="brand">
+        <span class="mark">НК</span>
+        <div>
+          <h1>Сервис контроля сварных соединений</h1>
+          <p>Авторизуйтесь, чтобы открыть техкарты или экспертную оценку.</p>
+        </div>
+      </div>
+
+      <form class="auth-form" id="authForm">
+        <div class="mode-switch" role="tablist" aria-label="Режим авторизации">
+          <button type="button" class="mode active" data-mode="login">Вход</button>
+          <button type="button" class="mode" data-mode="register">Регистрация</button>
+        </div>
+
+        <label>
+          Логин
+          <input id="username" name="username" autocomplete="username" required minlength="3">
+        </label>
+
+        <label>
+          Пароль
+          <input id="password" name="password" type="password" autocomplete="current-password" required minlength="6">
+        </label>
+
+        <p class="message" id="authMessage"></p>
+        <button class="primary" type="submit" id="submitButton">Войти</button>
+      </form>
+    </section>
+
+    <section class="dashboard hidden" id="dashboard">
+      <header class="dashboard-header">
+        <div>
+          <span class="eyebrow">Единый доступ</span>
+          <h1>Выбор модуля</h1>
+          <p id="welcomeText"></p>
+        </div>
+        <button class="ghost" type="button" id="logoutButton">Выйти</button>
+      </header>
+
+      <div class="service-grid">
+        <a class="service-link tech" href="/tech-cards/">
+          <span class="service-icon">ТК</span>
+          <span>
+            <strong>Технологические карты</strong>
+            <small>Создание, редактирование и сохранение карт НК.</small>
+          </span>
+        </a>
+
+        <a class="service-link expert" href="/expert-analysis/">
+          <span class="service-icon">ЭО</span>
+          <span>
+            <strong>Экспертная оценка</strong>
+            <small>Разметка снимков, поиск шва, дефекты и протокол DOCX.</small>
+          </span>
+        </a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

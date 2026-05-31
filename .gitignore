@@ -36,3 +36,9 @@ build/
 *.tmp
 *.bak
 .DS_Store
+
+# ==========================
+# Runtime data
+# ==========================
+portal/auth.sqlite3
+portal/generated/
