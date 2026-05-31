@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Сервис НК сварных соединений</title>
+  <link rel="stylesheet" href="/portal-static/module-nav.css">
   <link rel="stylesheet" href="/portal-static/style.css">
   <script src="/portal-static/app.js" defer></script>
 </head>
@@ -14,7 +15,7 @@
         <span class="mark">НК</span>
         <div>
           <h1>Сервис контроля сварных соединений</h1>
-          <p>Авторизуйтесь, чтобы открыть техкарты или экспертную оценку.</p>
+          <p>Авторизуйтесь, чтобы открыть технологические карты или экспертный анализ.</p>
         </div>
       </div>
 
@@ -40,31 +41,27 @@
     </section>
 
     <section class="dashboard hidden" id="dashboard">
-      <header class="dashboard-header">
-        <div>
-          <span class="eyebrow">Единый доступ</span>
-          <h1>Выбор модуля</h1>
-          <p id="welcomeText"></p>
+      <nav class="nk-module-nav dashboard-module-nav">
+        <div class="nk-module-tabs">
+          <a class="nk-module-tab" href="/expert-analysis/">Экспертный анализ</a>
+          <a class="nk-module-tab" href="/tech-cards/">Техкарты</a>
         </div>
-        <button class="ghost" type="button" id="logoutButton">Выйти</button>
-      </header>
 
-      <div class="service-grid">
-        <a class="service-link tech" href="/tech-cards/">
-          <span class="service-icon">ТК</span>
-          <span>
-            <strong>Технологические карты</strong>
-            <small>Создание, редактирование и сохранение карт НК.</small>
-          </span>
-        </a>
+        <div class="nk-module-user-menu">
+          <button class="nk-module-user" type="button" id="userMenuButton" aria-expanded="false">
+            <span class="nk-module-avatar" id="dashboardAvatar">U</span>
+            <span class="nk-module-username" id="dashboardUsername">Пользователь</span>
+          </button>
+          <div class="nk-module-menu hidden" id="userMenu">
+            <button type="button" id="logoutButton">Выйти</button>
+          </div>
+        </div>
+      </nav>
 
-        <a class="service-link expert" href="/expert-analysis/">
-          <span class="service-icon">ЭО</span>
-          <span>
-            <strong>Экспертная оценка</strong>
-            <small>Разметка снимков, поиск шва, дефекты и протокол DOCX.</small>
-          </span>
-        </a>
+      <div class="dashboard-content">
+        <span class="eyebrow">Единый сервис</span>
+        <h1>Выберите модуль сверху</h1>
+        <p id="welcomeText"></p>
       </div>
     </section>
   </main>
