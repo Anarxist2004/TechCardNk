@@ -44,6 +44,7 @@
     if (!user) {
       return;
     }
+    const displayName = user.full_name || user.username || 'Пользователь';
 
     const path = window.location.pathname;
     const nav = document.createElement('nav');
@@ -63,15 +64,15 @@
     button.className = 'nk-module-user';
     button.type = 'button';
     button.setAttribute('aria-expanded', 'false');
-    button.title = user.username || '';
+    button.title = displayName;
 
     const avatar = document.createElement('span');
     avatar.className = 'nk-module-avatar';
-    avatar.textContent = getInitial(user.username);
+    avatar.textContent = getInitial(displayName);
 
     const username = document.createElement('span');
     username.className = 'nk-module-username';
-    username.textContent = user.username || 'Пользователь';
+    username.textContent = displayName;
 
     const menu = document.createElement('div');
     menu.className = 'nk-module-menu hidden';

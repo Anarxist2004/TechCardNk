@@ -6,7 +6,6 @@ import importlib.util
 import json
 import os
 import secrets
-import sqlite3
 import sys
 import traceback
 from datetime import datetime, timedelta, timezone
@@ -14,6 +13,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
@@ -24,7 +25,6 @@ from pydantic import BaseModel
 ROOT_DIR = Path(__file__).resolve().parents[1]
 PORTAL_DIR = Path(__file__).resolve().parent
 PORTAL_STATIC_DIR = PORTAL_DIR / "static"
-AUTH_DB_PATH = PORTAL_DIR / "auth.sqlite3"
 GENERATED_DIR = PORTAL_DIR / "generated"
 
 BECK_DIR = ROOT_DIR / "beck"
@@ -33,6 +33,7 @@ EXPERT_PY_DIR = EXPERT_DIR / "py"
 FRONT_DIST_DIR = ROOT_DIR / "front" / "dist"
 TECHCARD_RES_DIR = BECK_DIR / "res"
 TECHCARD_DB_DSN = "host=localhost port=5432 dbname=victor_2 user=postgres password=admin"
+AUTH_DB_DSN = os.getenv("AUTH_DB_DSN", TECHCARD_DB_DSN)
 
 for module_dir in (str(BECK_DIR), str(EXPERT_PY_DIR)):
     if module_dir not in sys.path:
@@ -47,6 +48,9 @@ PBKDF2_ITERATIONS = 260_000
 class AuthPayload(BaseModel):
     username: str
     password: str
+    full_name: str | None = None
+    position: str | None = None
+    company: str | None = None
 
 
 app = FastAPI(title="NK unified service")
@@ -63,42 +67,53 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def db_connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(AUTH_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+def db_connect():
+    return psycopg2.connect(AUTH_DB_DSN, cursor_factory=RealDictCursor)
 
 
 def init_auth_db() -> None:
-    PORTAL_DIR.mkdir(parents=True, exist_ok=True)
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
     with db_connect() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL UNIQUE,
-                password_hash TEXT NOT NULL,
-                salt TEXT NOT NULL,
-                created_at TEXT NOT NULL
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS public.users (
+                    id bigserial PRIMARY KEY,
+                    username text NOT NULL UNIQUE,
+                    password_hash text NOT NULL,
+                    salt text NOT NULL,
+                    full_name text NOT NULL DEFAULT '',
+                    position text NOT NULL DEFAULT '',
+                    company text NOT NULL DEFAULT '',
+                    created_at timestamp with time zone NOT NULL DEFAULT now(),
+                    updated_at timestamp with time zone NOT NULL DEFAULT now()
+                )
+                """
             )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS sessions (
-                token TEXT PRIMARY KEY,
-                user_id INTEGER NOT NULL,
-                expires_at TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS public.sessions (
+                    token text PRIMARY KEY,
+                    user_id bigint NOT NULL,
+                    expires_at timestamp with time zone NOT NULL,
+                    created_at timestamp with time zone NOT NULL DEFAULT now(),
+                    CONSTRAINT sessions_user_id_fkey
+                        FOREIGN KEY (user_id)
+                        REFERENCES public.users (id)
+                        ON DELETE CASCADE
+                )
+                """
             )
-            """
-        )
-        conn.execute(
-            "DELETE FROM sessions WHERE expires_at <= ?",
-            (utc_now().isoformat(),),
-        )
+            cursor.execute("ALTER TABLE public.users ADD COLUMN IF NOT EXISTS full_name text NOT NULL DEFAULT ''")
+            cursor.execute("ALTER TABLE public.users ADD COLUMN IF NOT EXISTS position text NOT NULL DEFAULT ''")
+            cursor.execute("ALTER TABLE public.users ADD COLUMN IF NOT EXISTS company text NOT NULL DEFAULT ''")
+            cursor.execute("ALTER TABLE public.users ADD COLUMN IF NOT EXISTS updated_at timestamp with time zone NOT NULL DEFAULT now()")
+            cursor.execute("CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON public.sessions (user_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON public.sessions (expires_at)")
+            cursor.execute(
+                "DELETE FROM public.sessions WHERE expires_at <= %s",
+                (utc_now(),),
+            )
 
 
 @app.on_event("startup")
@@ -134,10 +149,14 @@ def create_session(user_id: int, response: Response) -> None:
     token = secrets.token_urlsafe(32)
     expires_at = utc_now() + timedelta(days=SESSION_DAYS)
     with db_connect() as conn:
-        conn.execute(
-            "INSERT INTO sessions (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)",
-            (token, user_id, expires_at.isoformat(), utc_now().isoformat()),
-        )
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO public.sessions (token, user_id, expires_at, created_at)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (token, user_id, expires_at, utc_now()),
+            )
 
     response.set_cookie(
         SESSION_COOKIE,
@@ -151,7 +170,8 @@ def create_session(user_id: int, response: Response) -> None:
 def clear_session(response: Response, token: str | None = None) -> None:
     if token:
         with db_connect() as conn:
-            conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+            with conn.cursor() as cursor:
+                cursor.execute("DELETE FROM public.sessions WHERE token = %s", (token,))
     response.delete_cookie(SESSION_COOKIE)
 
 
@@ -159,20 +179,22 @@ def get_user_by_session_token(token: str | None) -> dict[str, Any] | None:
     if not token:
         return None
 
-    now = utc_now().isoformat()
+    now = utc_now()
     with db_connect() as conn:
-        row = conn.execute(
-            """
-            SELECT u.id, u.username
-            FROM sessions s
-            INNER JOIN users u ON u.id = s.user_id
-            WHERE s.token = ? AND s.expires_at > ?
-            LIMIT 1
-            """,
-            (token, now),
-        ).fetchone()
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT u.id, u.username, u.full_name, u.position, u.company
+                FROM public.sessions s
+                INNER JOIN public.users u ON u.id = s.user_id
+                WHERE s.token = %s AND s.expires_at > %s
+                LIMIT 1
+                """,
+                (token, now),
+            )
+            row = cursor.fetchone()
 
-    return dict(row) if row else None
+    return row if row else None
 
 
 def current_user(request: Request) -> dict[str, Any] | None:
@@ -244,41 +266,82 @@ def inject_module_nav(html: str) -> str:
 def register(payload: AuthPayload, response: Response) -> dict[str, Any]:
     username = normalize_username(payload.username)
     password = payload.password
+    full_name = (payload.full_name or "").strip()
+    position = (payload.position or "").strip()
+    company = (payload.company or "").strip()
 
     if len(username) < 3:
-        raise HTTPException(status_code=400, detail="Логин должен быть не короче 3 символов")
+        raise HTTPException(status_code=400, detail="\u041b\u043e\u0433\u0438\u043d \u0434\u043e\u043b\u0436\u0435\u043d \u0431\u044b\u0442\u044c \u043d\u0435 \u043a\u043e\u0440\u043e\u0447\u0435 3 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432")
     if len(password) < 6:
-        raise HTTPException(status_code=400, detail="Пароль должен быть не короче 6 символов")
+        raise HTTPException(status_code=400, detail="\u041f\u0430\u0440\u043e\u043b\u044c \u0434\u043e\u043b\u0436\u0435\u043d \u0431\u044b\u0442\u044c \u043d\u0435 \u043a\u043e\u0440\u043e\u0447\u0435 6 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432")
+    if not full_name:
+        raise HTTPException(status_code=400, detail="\u0423\u043a\u0430\u0436\u0438\u0442\u0435 \u0424\u0418\u041e")
+    if not position:
+        raise HTTPException(status_code=400, detail="\u0423\u043a\u0430\u0436\u0438\u0442\u0435 \u0434\u043e\u043b\u0436\u043d\u043e\u0441\u0442\u044c")
+    if not company:
+        raise HTTPException(status_code=400, detail="\u0423\u043a\u0430\u0436\u0438\u0442\u0435 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u044e")
 
     password_hash, salt = create_password_hash(password)
     try:
         with db_connect() as conn:
-            cursor = conn.execute(
-                "INSERT INTO users (username, password_hash, salt, created_at) VALUES (?, ?, ?, ?)",
-                (username, password_hash, salt, utc_now().isoformat()),
-            )
-            user_id = int(cursor.lastrowid)
-    except sqlite3.IntegrityError as exc:
-        raise HTTPException(status_code=409, detail="Пользователь уже существует") from exc
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO public.users (
+                        username,
+                        password_hash,
+                        salt,
+                        full_name,
+                        position,
+                        company,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (username, password_hash, salt, full_name, position, company, utc_now(), utc_now()),
+                )
+                row = cursor.fetchone()
+                user_id = int(row["id"])
+    except psycopg2.IntegrityError as exc:
+        raise HTTPException(status_code=409, detail="\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c \u0443\u0436\u0435 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u0435\u0442") from exc
 
     create_session(user_id, response)
-    return {"username": username}
+    return {
+        "username": username,
+        "full_name": full_name,
+        "position": position,
+        "company": company,
+    }
 
 
 @app.post("/api/auth/login")
 def login(payload: AuthPayload, response: Response) -> dict[str, Any]:
     username = normalize_username(payload.username)
     with db_connect() as conn:
-        row = conn.execute(
-            "SELECT id, username, password_hash, salt FROM users WHERE username = ? LIMIT 1",
-            (username,),
-        ).fetchone()
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, username, password_hash, salt, full_name, position, company
+                FROM public.users
+                WHERE username = %s
+                LIMIT 1
+                """,
+                (username,),
+            )
+            row = cursor.fetchone()
 
     if not row or not verify_password(payload.password, row["password_hash"], row["salt"]):
-        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+        raise HTTPException(status_code=401, detail="\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043b\u043e\u0433\u0438\u043d \u0438\u043b\u0438 \u043f\u0430\u0440\u043e\u043b\u044c")
 
     create_session(int(row["id"]), response)
-    return {"username": row["username"]}
+    return {
+        "username": row["username"],
+        "full_name": row.get("full_name", ""),
+        "position": row.get("position", ""),
+        "company": row.get("company", ""),
+    }
 
 
 @app.post("/api/auth/logout")
@@ -289,7 +352,12 @@ def logout(request: Request, response: Response) -> dict[str, str]:
 
 @app.get("/api/auth/me")
 def me(user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
-    return {"username": user["username"]}
+    return {
+        "username": user["username"],
+        "full_name": user.get("full_name", ""),
+        "position": user.get("position", ""),
+        "company": user.get("company", ""),
+    }
 
 
 @lru_cache(maxsize=1)

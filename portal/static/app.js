@@ -10,6 +10,7 @@ const dashboardUsername = document.querySelector('#dashboardUsername');
 const userMenuButton = document.querySelector('#userMenuButton');
 const userMenu = document.querySelector('#userMenu');
 const modeButtons = document.querySelectorAll('[data-mode]');
+const registerOnlyFields = document.querySelectorAll('.register-only');
 
 let mode = 'login';
 
@@ -20,18 +21,35 @@ function getInitial(username) {
 
 function setMode(nextMode) {
   mode = nextMode;
+  const isRegister = mode === 'register';
+
   modeButtons.forEach((button) => {
     button.classList.toggle('active', button.dataset.mode === mode);
   });
-  submitButton.textContent = mode === 'login' ? 'Войти' : 'Создать пользователя';
+
+  registerOnlyFields.forEach((field) => {
+    const input = field.querySelector('input');
+    field.classList.toggle('hidden', !isRegister);
+    if (input) {
+      input.required = isRegister;
+    }
+  });
+
+  authForm.password.autocomplete = isRegister ? 'new-password' : 'current-password';
+  submitButton.textContent = isRegister ? 'Создать пользователя' : 'Войти';
   authMessage.textContent = '';
 }
 
 function setUser(user) {
   const username = user?.username || 'Пользователь';
-  dashboardUsername.textContent = username;
-  dashboardAvatar.textContent = getInitial(username);
-  welcomeText.textContent = `Вы вошли как ${username}. Откройте нужный модуль через вкладки сверху.`;
+  const displayName = user?.full_name || username;
+  const details = [user?.position, user?.company].filter(Boolean).join(', ');
+
+  dashboardUsername.textContent = displayName;
+  dashboardAvatar.textContent = getInitial(displayName);
+  welcomeText.textContent = details
+    ? `${displayName}: ${details}`
+    : `Вы вошли как ${displayName}. Откройте нужный модуль через вкладки сверху.`;
 }
 
 function showDashboard(user) {
@@ -98,6 +116,12 @@ authForm.addEventListener('submit', async (event) => {
     password: authForm.password.value,
   };
 
+  if (mode === 'register') {
+    payload.full_name = authForm.full_name.value;
+    payload.position = authForm.position.value;
+    payload.company = authForm.company.value;
+  }
+
   try {
     const user = await requestJson(`/api/auth/${mode}`, {
       method: 'POST',
@@ -117,4 +141,5 @@ logoutButton.addEventListener('click', async () => {
   showAuth();
 });
 
+setMode(mode);
 loadMe();
