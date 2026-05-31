@@ -138,6 +138,7 @@ function normalizeSavedImagesList(images) {
       id: image.id || `overview-saved-${index}`,
       name: image.name || `Изображение ${index + 1}`,
       preview: image.preview,
+      createdAt: image.createdAt || image.created_at || null,
       fileName: image.fileName || null,
       mimeType: image.mimeType || null,
     }));

@@ -54,7 +54,34 @@ const createEmptyOverview = () => ({
   photographerPosition: '',
   company: '',
   weldImages: [],
+  imageDateFilter: '',
 });
+
+const formatDateForInput = (value) => {
+  if (!value) {
+    return '';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return '';
+  }
+
+  return parsed.toISOString().slice(0, 10);
+};
+
+const formatDisplayDate = (value) => {
+  if (!value) {
+    return 'Дата не указана';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return String(value);
+  }
+
+  return parsed.toLocaleString('ru-RU');
+};
 
 const normalizeUploadedImagesState = (images) => {
   if (!images || typeof images !== 'object') {
@@ -98,6 +125,7 @@ const normalizeImagesList = (images) => (
         id: image.id || `image-${index}`,
         name: image.name || `Изображение ${index + 1}`,
         preview: image.preview,
+        createdAt: image.createdAt || image.created_at || new Date().toISOString(),
         ...(image.fileName ? { fileName: image.fileName } : {}),
         ...(image.mimeType ? { mimeType: image.mimeType } : {}),
       }))
@@ -120,6 +148,7 @@ const buildOverviewForSave = (overview) => {
       id: image.id,
       name: image.name,
       preview: image.preview,
+      createdAt: image.createdAt,
       ...(image.fileName ? { fileName: image.fileName } : {}),
       ...(image.mimeType ? { mimeType: image.mimeType } : {}),
     })),
@@ -1096,6 +1125,7 @@ const TechCardForm = ({ initialSavedCard = null }) => {
   const [customFields, setCustomFields] = useState({});
   const [uploadedImages, setUploadedImages] = useState({});
   const [overview, setOverview] = useState(createEmptyOverview);
+  const [collapsedOverviewImages, setCollapsedOverviewImages] = useState({});
   const [standardValuesCache, setStandardValuesCache] = useState({});
   const [savingOptionKey, setSavingOptionKey] = useState(null);
   const [activeTabId, setActiveTabId] = useState('');
@@ -1122,6 +1152,7 @@ const TechCardForm = ({ initialSavedCard = null }) => {
     setCustomFields({});
     setUploadedImages({});
     setOverview(createEmptyOverview());
+    setCollapsedOverviewImages({});
     setStandardValuesCache({});
     setActiveTabId('');
     setSavedCardId(null);
@@ -1166,6 +1197,7 @@ const TechCardForm = ({ initialSavedCard = null }) => {
     setCustomFields(savedCard.customFields || {});
     setUploadedImages(normalizeUploadedImagesState(savedCard.uploadedImages));
     setOverview(normalizeOverviewState(savedCard.overview));
+    setCollapsedOverviewImages({});
     setSavedCardId(savedCard.id ?? null);
     setCardName(savedCard.cardName || savedCard.name || '');
   };
@@ -1387,6 +1419,7 @@ const TechCardForm = ({ initialSavedCard = null }) => {
               file,
               preview: loadEvent.target.result,
               name: file.name,
+              createdAt: new Date().toISOString(),
             },
           ],
         }));
@@ -1401,6 +1434,18 @@ const TechCardForm = ({ initialSavedCard = null }) => {
     setOverview((prev) => ({
       ...prev,
       weldImages: normalizeImagesList(prev.weldImages).filter((image) => image.id !== imageId),
+    }));
+    setCollapsedOverviewImages((prev) => {
+      const next = { ...prev };
+      delete next[imageId];
+      return next;
+    });
+  };
+
+  const toggleOverviewImageCollapse = (imageId) => {
+    setCollapsedOverviewImages((prev) => ({
+      ...prev,
+      [imageId]: !prev[imageId],
     }));
   };
 
@@ -1973,6 +2018,9 @@ const TechCardForm = ({ initialSavedCard = null }) => {
     ? [activeBlockTab.block]
     : blocks;
   const overviewImages = normalizeImagesList(overview.weldImages);
+  const filteredOverviewImages = overview.imageDateFilter
+    ? overviewImages.filter((image) => formatDateForInput(image.createdAt) === overview.imageDateFilter)
+    : overviewImages;
 
   return (
     <div className="bg-[#21262F] rounded-2xl p-6 md:p-8">
@@ -2124,47 +2172,101 @@ const TechCardForm = ({ initialSavedCard = null }) => {
                 </div>
 
                 <div className="mt-5 border-t border-[#646C89]/30 pt-5">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <h4 className="text-sm font-semibold text-white">Снимки сварного шва</h4>
-                    <label className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-[#D97B54] transition-colors hover:bg-[#D97B54]/10">
-                      <Image size={16} />
-                      Добавить снимки
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleOverviewImageUpload}
-                        className="hidden"
-                      />
-                    </label>
+                  <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-white">Снимки сварного шва</h4>
+                      <p className="mt-1 text-xs text-[#646C89]">
+                        {filteredOverviewImages.length}/{overviewImages.length}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <label className="block">
+                        <span className="mb-1 block text-xs text-[#646C89]">Дата снимка</span>
+                        <input
+                          type="date"
+                          value={overview.imageDateFilter}
+                          onChange={(event) => updateOverviewField('imageDateFilter', event.target.value)}
+                          className="rounded-lg border border-[#646C89]/50 bg-[#0C1515] px-3 py-1.5 text-sm text-white focus:border-[#D97B54] focus:outline-none"
+                        />
+                      </label>
+                      {overview.imageDateFilter && (
+                        <button
+                          type="button"
+                          onClick={() => updateOverviewField('imageDateFilter', '')}
+                          className="rounded-lg px-3 py-1.5 text-sm text-[#646C89] transition-colors hover:bg-[#646C89]/10 hover:text-white"
+                        >
+                          Сбросить
+                        </button>
+                      )}
+                      <label className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-[#D97B54] transition-colors hover:bg-[#D97B54]/10">
+                        <Image size={16} />
+                        Добавить снимки
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={handleOverviewImageUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
                   </div>
 
                   {overviewImages.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                      {overviewImages.map((image) => (
-                        <div key={image.id} className="relative group">
-                          <img
-                            src={image.preview}
-                            alt={image.name}
-                            className="h-36 w-full rounded-lg border-4 object-cover"
-                            style={{ borderColor: IMAGE_FRAME_COLOR }}
-                          />
-                          <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
-                            <button
-                              type="button"
-                              onClick={() => deleteOverviewImage(image.id)}
-                              className="rounded-full bg-red-500 p-2 text-white transition-colors hover:bg-red-600"
-                              title="Удалить снимок"
-                            >
-                              <X size={16} />
-                            </button>
-                          </div>
-                          <p className="mt-1 truncate text-xs text-[#646C89]" title={image.name}>
-                            {image.name}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
+                    filteredOverviewImages.length > 0 ? (
+                      <div className="space-y-3">
+                        {filteredOverviewImages.map((image, imageIndex) => {
+                          const isCollapsed = Boolean(collapsedOverviewImages[image.id]);
+
+                          return (
+                            <div key={image.id} className="rounded-xl border border-[#646C89]/25 bg-[#0C1515]/45">
+                              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleOverviewImageCollapse(image.id)}
+                                  className="flex min-w-0 items-center gap-2 text-left"
+                                >
+                                  <span className="text-[#646C89]">
+                                    {isCollapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+                                  </span>
+                                  <span className="min-w-0">
+                                    <span className="block truncate text-sm font-semibold text-white">
+                                      Снимок {imageIndex + 1}: {image.name}
+                                    </span>
+                                    <span className="block text-xs text-[#646C89]">
+                                      Добавлен: {formatDisplayDate(image.createdAt)}
+                                    </span>
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteOverviewImage(image.id)}
+                                  className="rounded-lg p-2 text-[#646C89] transition-colors hover:bg-red-500/10 hover:text-red-400"
+                                  title="Удалить снимок"
+                                >
+                                  <X size={16} />
+                                </button>
+                              </div>
+
+                              {!isCollapsed && (
+                                <div className="border-t border-[#646C89]/20 p-4">
+                                  <img
+                                    src={image.preview}
+                                    alt={image.name}
+                                    className="max-h-[420px] w-full rounded-lg border-4 object-contain"
+                                    style={{ borderColor: IMAGE_FRAME_COLOR }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="rounded-lg border border-[#646C89]/20 bg-[#0C1515]/40 px-4 py-6 text-center text-sm text-[#646C89]">
+                        За выбранную дату снимков нет
+                      </p>
+                    )
                   ) : (
                     <p className="rounded-lg border border-[#646C89]/20 bg-[#0C1515]/40 px-4 py-6 text-center text-sm text-[#646C89]">
                       Снимки пока не добавлены
