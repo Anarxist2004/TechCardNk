@@ -1,0 +1,153 @@
+.nk-module-nav {
+  position: sticky;
+  top: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 58px;
+  padding: 8px 24px;
+  background: #21262F;
+  border-bottom: 1px solid rgba(100, 108, 137, 0.3);
+  color: #ffffff;
+  font-family: Tahoma, Verdana, "Segoe UI", sans-serif;
+}
+
+.nk-module-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nk-module-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid rgba(100, 108, 137, 0.35);
+  border-radius: 8px;
+  color: #c9cfdd;
+  background: rgba(12, 21, 21, 0.46);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.nk-module-tab:hover {
+  color: #ffffff;
+  border-color: rgba(217, 123, 84, 0.55);
+  background: rgba(217, 123, 84, 0.12);
+}
+
+.nk-module-tab.is-active {
+  color: #ffffff;
+  border-color: #D97B54;
+  background: rgba(217, 123, 84, 0.2);
+}
+
+.nk-module-user-menu {
+  position: relative;
+  min-width: 0;
+}
+
+.nk-module-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #c9cfdd;
+  cursor: pointer;
+  padding: 2px 4px 2px 2px;
+}
+
+.nk-module-user:hover,
+.nk-module-user[aria-expanded="true"] {
+  border-color: rgba(217, 123, 84, 0.35);
+  background: rgba(217, 123, 84, 0.1);
+}
+
+.nk-module-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(217, 123, 84, 0.58);
+  background: rgba(217, 123, 84, 0.18);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.nk-module-username {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.nk-module-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 160px;
+  padding: 6px;
+  border: 1px solid rgba(100, 108, 137, 0.35);
+  border-radius: 8px;
+  background: #21262F;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.36);
+}
+
+.nk-module-menu button {
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #c9cfdd;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  padding: 0 10px;
+}
+
+.nk-module-menu button:hover {
+  color: #ffffff;
+  background: rgba(217, 123, 84, 0.14);
+}
+
+.nk-module-menu.hidden {
+  display: none !important;
+}
+
+.nk-module-nav ~ .popup_add_defect,
+.nk-module-nav ~ .popup_delete_defect,
+.nk-module-nav ~ .popup_save {
+  top: 78px;
+}
+
+@media (max-width: 640px) {
+  .nk-module-nav {
+    padding: 8px 12px;
+  }
+
+  .nk-module-tabs {
+    gap: 6px;
+  }
+
+  .nk-module-tab {
+    padding: 0 10px;
+    font-size: 13px;
+  }
+
+  .nk-module-username {
+    display: none;
+  }
+}

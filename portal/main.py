@@ -224,6 +224,22 @@ def portal_index() -> str:
     return (PORTAL_STATIC_DIR / "index.html").read_text(encoding="utf-8")
 
 
+def inject_module_nav(html: str) -> str:
+    if "/portal-static/module-nav.css" not in html:
+        html = html.replace(
+            "</head>",
+            '    <link rel="stylesheet" href="/portal-static/module-nav.css" />\n</head>',
+            1,
+        )
+    if "/portal-static/module-nav.js" not in html:
+        html = html.replace(
+            "</head>",
+            '    <script src="/portal-static/module-nav.js" defer></script>\n</head>',
+            1,
+        )
+    return html
+
+
 @app.post("/api/auth/register")
 def register(payload: AuthPayload, response: Response) -> dict[str, Any]:
     username = normalize_username(payload.username)
@@ -526,6 +542,14 @@ async def save_protocol_docx(
 @app.get("/tech-cards")
 def tech_cards_redirect(_user: dict[str, Any] = Depends(require_user)):
     return RedirectResponse("/tech-cards/")
+
+
+@app.get("/tech-cards/", response_class=HTMLResponse)
+def tech_cards_index(_user: dict[str, Any] = Depends(require_user)) -> str:
+    index_path = FRONT_DIST_DIR / "index.html"
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="Tech cards frontend build not found")
+    return inject_module_nav(index_path.read_text(encoding="utf-8"))
 
 
 @app.get("/expert-analysis")
