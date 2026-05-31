@@ -40,19 +40,18 @@
                 <input type="file" id="fileInput" class="file-input" accept="image/*">
                 <label for="fileInput" class="tool-btn">Загрузить изображение</label>
                 <div class="tool-panel">
-                    <label for="etalonValue" class="tool-label">Эталон:</label>
-                    <select id="etalonValue" class="tool-select">
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
+                    <label for="etalonType" class="tool-label">Тип эталона:</label>
+                    <select id="etalonType" class="tool-select">
+                        <option value="groove">Канавочный</option>
+                        <option value="plate">Пластинчатый</option>
+                        <option value="wire">Проволочный</option>
                     </select>
                 </div>
-                <div class="dropdown">
-                    <button class="tool-btn dropdown-btn" id="figureDropdown">Эталоны ↓</button>
-                    <div class="dropdown-content">
-                        <div class="dropdown-item" data-tool="line_etalon">Эталонная линия</div>
-                    </div>
+                <div class="tool-panel">
+                    <label for="etalonValue" class="tool-label">Номер:</label>
+                    <select id="etalonValue" class="tool-select"></select>
                 </div>
+                <button class="tool-btn" data-tool="line_etalon">Эталонная линия</button>
                 <div class="dropdown">
                     <button class="tool-btn dropdown-btn" id="figureDropdown">Фигуры ↓</button>
                     <div class="dropdown-content">

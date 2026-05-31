@@ -324,7 +324,7 @@ body {
 }
 
 .annotation-left {
-    width: 60%;
+    width: 65%;
     height: 100%;
     max-height: 450px;
     overflow-y: auto;
@@ -333,7 +333,7 @@ body {
 }
 
 .annotation-right {
-    width: 40%;
+    width: 35%;
     height: 100%;
     padding: 10px;
     box-sizing: border-box;
@@ -446,21 +446,209 @@ body {
 }
 
 .defects {
-    width: 50%;
+    width: 100%;
+
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 12px;
+
+    padding-right: 10px;
 }
 
 .defect {
-    width: 350px;
-    height: 50px;
-    background-color: #21262F;
-    border-radius: 20px;
-    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.716);
-    color: #fff;
+    width: 330px;
+    min-height: 52px;
+
+    background: linear-gradient(145deg, #232936, #1d222d);
+    border: 1px solid rgba(140, 181, 238, 0.12);
+    border-radius: 16px;
+
+    color: #ffffff;
+
     display: flex;
-    padding: 15px;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 10px;
+    gap: 12px;
+
+    padding: 12px 16px;
+
+    cursor: pointer;
+
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease,
+        transform 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.defect:hover {
+    background: linear-gradient(145deg, #293141, #222938);
+    border-color: rgba(140, 181, 238, 0.35);
+
+    transform: translateY(-1px);
+}
+
+.defect p {
+    margin: 0;
+    line-height: 1.2;
+}
+
+.defect p:first-child {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.defect p:last-child {
+    font-size: 13px;
+    color: #c7d3e6;
+    white-space: nowrap;
+}
+
+.defect-single {
+    margin: 0;
+}
+
+.defect-group {
+    width: 330px;
+
+    background: linear-gradient(145deg, #232936, #1d222d);
+    border: 1px solid rgba(140, 181, 238, 0.12);
+    border-radius: 16px;
+
+    color: #ffffff;
+
+    overflow: hidden;
+
+    transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.defect-group:hover {
+    border-color: rgba(140, 181, 238, 0.28);
+}
+
+.defect-group-header {
+    min-height: 52px;
+
+    padding: 12px 16px;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+
+    cursor: pointer;
+    list-style: none;
+
+    font-size: 14px;
+    font-weight: 600;
+
+    transition: background 0.15s ease;
+}
+
+.defect-group-header:hover {
+    background: rgba(140, 181, 238, 0.06);
+}
+
+.defect-group-header::-webkit-details-marker {
+    display: none;
+}
+
+.defect-group-header::marker {
+    display: none;
+    content: "";
+}
+
+.defect-group-header span:first-child {
+    color: #ffffff;
+}
+
+.defect-group-header span:last-child {
+    color: #c7d3e6;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.defect-group-header::after {
+    content: "▼";
+
+    font-size: 10px;
+    color: #8cb5ee;
+
+    margin-left: 2px;
+
+    transition: transform 0.2s ease;
+}
+
+.defect-group[open] .defect-group-header::after {
+    transform: rotate(180deg);
+}
+
+.defect-group-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    padding: 0 10px 10px 10px;
+}
+
+.defect-child {
+    width: 100%;
+    min-height: 44px;
+
+    background: rgba(43, 49, 61, 0.95);
+    border: 1px solid rgba(140, 181, 238, 0.10);
+    border-radius: 12px;
+
+    padding: 10px 12px;
+
+    box-shadow: none;
+
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.defect-child:hover {
+    background: rgba(54, 62, 77, 0.98);
+    border-color: rgba(140, 181, 238, 0.28);
+
+    transform: none;
+
+    box-shadow: none;
+}
+
+.defect-child p:first-child {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.defect-child p:last-child {
+    font-size: 13px;
+    color: #c7d3e6;
+}
+
+@media (max-width: 1100px) {
+    .defect,
+    .defect-group {
+        width: 300px;
+    }
+}
+
+@media (max-width: 768px) {
+    .defects {
+        flex-direction: column;
+        flex-wrap: nowrap;
+    }
+
+    .defect,
+    .defect-group {
+        width: 100%;
+    }
 }
 
 .comments {
