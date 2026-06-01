@@ -275,6 +275,64 @@ body {
     text-decoration: none;
 }
 
+.expert-history__delete {
+    border-color: rgba(242, 92, 92, 0.55);
+    color: #ffd6d6;
+}
+
+.expert-history__delete:hover {
+    background: #7c2424;
+}
+
+.expert-history-delete {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.62);
+}
+
+.expert-history-delete__dialog {
+    width: min(380px, 100%);
+    padding: 18px;
+    border: 1px solid #3a3f4b;
+    border-radius: 8px;
+    background: #171d27;
+    color: #e0e0e0;
+}
+
+.expert-history-delete__dialog h3 {
+    margin: 0 0 8px;
+    font-size: 18px;
+    color: #ffffff;
+}
+
+.expert-history-delete__dialog p {
+    margin: 0 0 14px;
+    color: #b4bfd2;
+    font-size: 13px;
+}
+
+.expert-history-delete__dialog input {
+    width: 100%;
+    min-height: 38px;
+    padding: 8px 10px;
+    border: 1px solid #3a3f4b;
+    border-radius: 6px;
+    background: #0f141c;
+    color: #ffffff;
+}
+
+.expert-history-delete__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+}
+
 .expert-history__empty {
     padding: 12px;
     text-align: center;

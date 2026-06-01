@@ -225,6 +225,29 @@ def verify_password(password: str, expected_hash: str, salt_hex: str) -> bool:
     return hmac.compare_digest(actual_hash, expected_hash)
 
 
+def verify_user_password(user_id: Any, password: str) -> bool:
+    if not password:
+        return False
+
+    with db_connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT password_hash, salt
+                FROM public.users
+                WHERE id = %s
+                LIMIT 1
+                """,
+                (user_id,),
+            )
+            row = cursor.fetchone()
+
+    if not row:
+        return False
+
+    return verify_password(password, row["password_hash"], row["salt"])
+
+
 def create_session(user_id: int, response: Response) -> None:
     token = secrets.token_urlsafe(32)
     expires_at = utc_now() + timedelta(days=SESSION_DAYS)
@@ -717,13 +740,15 @@ def resolve_generated_path(relative_path: str) -> Path:
     return path
 
 
-def serialize_artifact_row(row: dict[str, Any], kind: str) -> dict[str, Any]:
+def serialize_artifact_row(row: dict[str, Any], kind: str, current_user_id: Any = None) -> dict[str, Any]:
     user_name = (
         str(row.get("full_name") or "").strip()
         or str(row.get("username") or "").strip()
         or "Неизвестный пользователь"
     )
     created_at = row.get("created_at")
+    owner_id = row.get("user_id")
+    can_delete = owner_id is not None and str(owner_id) == str(current_user_id)
 
     return {
         "id": row.get("id"),
@@ -734,16 +759,18 @@ def serialize_artifact_row(row: dict[str, Any], kind: str) -> dict[str, Any]:
         "username": row.get("username") or "",
         "createdAt": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
         "downloadUrl": f"/expert/{kind}/{row.get('id')}/download",
+        "deleteUrl": f"/expert/{kind}/{row.get('id')}/delete",
+        "canDelete": can_delete,
         **({"loadUrl": f"/expert/annotations/{row.get('id')}/content"} if kind == "annotations" else {}),
     }
 
 
-def list_expert_artifacts(image_key: str) -> dict[str, list[dict[str, Any]]]:
+def list_expert_artifacts(image_key: str, current_user_id: Any = None) -> dict[str, list[dict[str, Any]]]:
     with db_connect() as conn:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT a.id, a.image_key, a.image_url, a.image_name, a.created_at,
+                SELECT a.id, a.image_key, a.image_url, a.image_name, a.user_id, a.created_at,
                        u.username, u.full_name
                 FROM public.expert_image_annotations a
                 LEFT JOIN public.users u ON u.id = a.user_id
@@ -752,11 +779,14 @@ def list_expert_artifacts(image_key: str) -> dict[str, list[dict[str, Any]]]:
                 """,
                 (image_key,),
             )
-            annotations = [serialize_artifact_row(dict(row), "annotations") for row in cursor.fetchall()]
+            annotations = [
+                serialize_artifact_row(dict(row), "annotations", current_user_id)
+                for row in cursor.fetchall()
+            ]
 
             cursor.execute(
                 """
-                SELECT p.id, p.image_key, p.image_url, p.image_name, p.created_at,
+                SELECT p.id, p.image_key, p.image_url, p.image_name, p.user_id, p.created_at,
                        u.username, u.full_name
                 FROM public.expert_image_protocols p
                 LEFT JOIN public.users u ON u.id = p.user_id
@@ -765,7 +795,10 @@ def list_expert_artifacts(image_key: str) -> dict[str, list[dict[str, Any]]]:
                 """,
                 (image_key,),
             )
-            protocols = [serialize_artifact_row(dict(row), "protocols") for row in cursor.fetchall()]
+            protocols = [
+                serialize_artifact_row(dict(row), "protocols", current_user_id)
+                for row in cursor.fetchall()
+            ]
 
     return {"annotations": annotations, "protocols": protocols}
 
@@ -790,6 +823,41 @@ def get_artifact_file(table: str, record_id: int) -> Path:
         raise HTTPException(status_code=404, detail="File not found")
 
     return filepath
+
+
+def delete_expert_artifact(table: str, record_id: int, user: dict[str, Any], password: str) -> dict[str, Any]:
+    if table not in {"expert_image_annotations", "expert_image_protocols"}:
+        raise HTTPException(status_code=400, detail="Invalid artifact type")
+
+    with db_connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                f"SELECT id, image_key, user_id, file_path FROM public.{table} WHERE id = %s LIMIT 1",
+                (record_id,),
+            )
+            row = cursor.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+
+    if str(row.get("user_id")) != str(user.get("id")):
+        raise HTTPException(status_code=403, detail="Удалить может только владелец записи")
+
+    if not verify_user_password(user.get("id"), password):
+        raise HTTPException(status_code=403, detail="Неверный пароль")
+
+    filepath = resolve_generated_path(row["file_path"])
+    with db_connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(f"DELETE FROM public.{table} WHERE id = %s", (record_id,))
+
+    try:
+        if filepath.exists():
+            filepath.unlink()
+    except OSError:
+        pass
+
+    return list_expert_artifacts(row["image_key"], user.get("id"))
 
 
 @app.post("/techcard/{control_type}")
@@ -875,7 +943,7 @@ async def expert_image_history(
     _user: dict[str, Any] = Depends(require_user),
 ) -> dict[str, list[dict[str, Any]]]:
     image = normalize_expert_image(payload.get("image") if isinstance(payload, dict) else {})
-    return list_expert_artifacts(image["key"])
+    return list_expert_artifacts(image["key"], _user.get("id"))
 
 
 @app.get("/expert/annotations/{record_id}/content")
@@ -904,6 +972,19 @@ def expert_annotation_download(
     )
 
 
+@app.post("/expert/annotations/{record_id}/delete")
+def expert_annotation_delete(
+    record_id: int,
+    payload: dict[str, Any] = Body({}),
+    _user: dict[str, Any] = Depends(require_user),
+) -> dict[str, Any]:
+    password = str(payload.get("password") or "") if isinstance(payload, dict) else ""
+    return {
+        "status": "ok",
+        "history": delete_expert_artifact("expert_image_annotations", record_id, _user, password),
+    }
+
+
 @app.get("/expert/protocols/{record_id}/download")
 def expert_protocol_download(
     record_id: int,
@@ -915,6 +996,19 @@ def expert_protocol_download(
         filename=filepath.name,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
+
+
+@app.post("/expert/protocols/{record_id}/delete")
+def expert_protocol_delete(
+    record_id: int,
+    payload: dict[str, Any] = Body({}),
+    _user: dict[str, Any] = Depends(require_user),
+) -> dict[str, Any]:
+    password = str(payload.get("password") or "") if isinstance(payload, dict) else ""
+    return {
+        "status": "ok",
+        "history": delete_expert_artifact("expert_image_protocols", record_id, _user, password),
+    }
 
 
 @app.post("/find_shov")
@@ -983,10 +1077,11 @@ async def save_annotation(
 
     row["username"] = _user.get("username", "")
     row["full_name"] = _user.get("full_name", "")
+    row["user_id"] = _user.get("id")
     return {
         "status": "ok",
-        "record": serialize_artifact_row(row, "annotations"),
-        "history": list_expert_artifacts(image["key"]),
+        "record": serialize_artifact_row(row, "annotations", _user.get("id")),
+        "history": list_expert_artifacts(image["key"], _user.get("id")),
     }
 
 

@@ -27,6 +27,110 @@
         status.textContent = text
     }
 
+    async function readResponseJson(response) {
+        const text = await response.text()
+        if (!text) return {}
+
+        try {
+            return JSON.parse(text)
+        } catch (error) {
+            return {}
+        }
+    }
+
+    function requestDeletePassword(label) {
+        return new Promise((resolve) => {
+            const overlay = document.createElement("div")
+            overlay.className = "expert-history-delete"
+
+            const dialog = document.createElement("form")
+            dialog.className = "expert-history-delete__dialog"
+
+            const title = document.createElement("h3")
+            title.textContent = `Удалить ${label}?`
+
+            const text = document.createElement("p")
+            text.textContent = "Введите пароль от вашей учетной записи для подтверждения удаления."
+
+            const input = document.createElement("input")
+            input.type = "password"
+            input.autocomplete = "current-password"
+            input.required = true
+            input.placeholder = "Пароль"
+
+            const actions = document.createElement("div")
+            actions.className = "expert-history-delete__actions"
+
+            const cancelButton = document.createElement("button")
+            cancelButton.type = "button"
+            cancelButton.className = "tool-btn"
+            cancelButton.textContent = "Отмена"
+
+            const submitButton = document.createElement("button")
+            submitButton.type = "submit"
+            submitButton.className = "tool-btn expert-history__delete"
+            submitButton.textContent = "Удалить"
+
+            function close(value) {
+                overlay.remove()
+                resolve(value)
+            }
+
+            cancelButton.addEventListener("click", () => close(null))
+            overlay.addEventListener("click", (event) => {
+                if (event.target === overlay) close(null)
+            })
+            dialog.addEventListener("submit", (event) => {
+                event.preventDefault()
+                close(input.value)
+            })
+
+            actions.append(cancelButton, submitButton)
+            dialog.append(title, text, input, actions)
+            overlay.appendChild(dialog)
+            document.body.appendChild(overlay)
+            input.focus()
+        })
+    }
+
+    async function deleteArtifact(item, type) {
+        const label = type === "annotation" ? "аннотацию" : "протокол проверки"
+        if (!item.canDelete || !item.deleteUrl) {
+            alert("Удалить может только владелец записи.")
+            return
+        }
+
+        const password = await requestDeletePassword(label)
+        if (!password) {
+            return
+        }
+
+        try {
+            const response = await fetch(item.deleteUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                credentials: "same-origin",
+                body: JSON.stringify({ password }),
+            })
+            const data = await readResponseJson(response)
+            if (!response.ok) {
+                throw new Error(data.detail || "Не удалось удалить запись")
+            }
+
+            if (data.history) {
+                renderHistory(data.history)
+            } else {
+                void loadHistory()
+            }
+            setStatus(type === "annotation" ? "Аннотация удалена." : "Протокол проверки удален.")
+        } catch (error) {
+            console.error("Не удалось удалить запись:", error)
+            alert(error.message || "Не удалось удалить запись")
+        }
+    }
+
     function createArtifactCard(item, type) {
         const row = document.createElement("article")
         row.className = "expert-history__item"
@@ -82,6 +186,17 @@
         download.textContent = type === "annotation" ? "JSON" : "Скачать"
         download.download = ""
         actions.appendChild(download)
+
+        if (item.canDelete) {
+            const deleteButton = document.createElement("button")
+            deleteButton.type = "button"
+            deleteButton.className = "tool-btn expert-history__delete"
+            deleteButton.textContent = "Удалить"
+            deleteButton.addEventListener("click", () => {
+                void deleteArtifact(item, type)
+            })
+            actions.appendChild(deleteButton)
+        }
 
         row.append(meta, actions)
         return row
