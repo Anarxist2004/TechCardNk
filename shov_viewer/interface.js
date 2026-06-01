@@ -5,6 +5,8 @@ tools.forEach(tool => {
     tool.addEventListener("click", (e) => {
         if (tool.closest(".dropdown")) return;
         if (tool.id === "selectSavedImageBtn") return;
+        if (tool.id === "refreshExpertHistory") return;
+        if (!tool.dataset.tool && tool.id !== "deleteBtn") return;
 
         clearAllActive()
         tool.classList.add("active")

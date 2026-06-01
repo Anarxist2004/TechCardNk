@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import Json, RealDictCursor
 from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
@@ -152,6 +152,33 @@ def init_auth_db() -> None:
                 )
                 """
             )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS public.expert_image_annotations (
+                    id bigserial PRIMARY KEY,
+                    image_key text NOT NULL,
+                    image_url text,
+                    image_name text,
+                    user_id bigint REFERENCES public.users (id) ON DELETE SET NULL,
+                    file_path text NOT NULL,
+                    created_at timestamp with time zone NOT NULL DEFAULT now()
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS public.expert_image_protocols (
+                    id bigserial PRIMARY KEY,
+                    image_key text NOT NULL,
+                    image_url text,
+                    image_name text,
+                    user_id bigint REFERENCES public.users (id) ON DELETE SET NULL,
+                    file_path text NOT NULL,
+                    protocol_data jsonb NOT NULL DEFAULT '{}'::jsonb,
+                    created_at timestamp with time zone NOT NULL DEFAULT now()
+                )
+                """
+            )
             cursor.execute("CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON public.sessions (user_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON public.sessions (expires_at)")
             cursor.execute("CREATE INDEX IF NOT EXISTS tech_cards_user_id_idx ON public.tech_cards (user_id)")
@@ -159,6 +186,10 @@ def init_auth_db() -> None:
             cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS tech_card_images_card_url_idx ON public.tech_card_images (tech_card_id, image_url)")
             cursor.execute("CREATE INDEX IF NOT EXISTS tech_card_image_descriptions_image_id_idx ON public.tech_card_image_descriptions (image_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS tech_card_image_descriptions_user_id_idx ON public.tech_card_image_descriptions (user_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS expert_image_annotations_image_key_idx ON public.expert_image_annotations (image_key)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS expert_image_annotations_user_id_idx ON public.expert_image_annotations (user_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS expert_image_protocols_image_key_idx ON public.expert_image_protocols (image_key)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS expert_image_protocols_user_id_idx ON public.expert_image_protocols (user_id)")
             cursor.execute(
                 "DELETE FROM public.sessions WHERE expires_at <= %s",
                 (utc_now(),),
@@ -276,6 +307,7 @@ async def auth_middleware(request: Request, call_next):
         if (
             request.url.path.startswith("/api/")
             or request.url.path.startswith("/techcard")
+            or request.url.path.startswith("/expert/")
             or request.url.path
             in {
                 "/find_shov",
@@ -287,7 +319,11 @@ async def auth_middleware(request: Request, call_next):
             return JSONResponse({"detail": "Authentication required"}, status_code=401)
         return RedirectResponse("/")
 
-    return await call_next(request)
+    response = await call_next(request)
+    if request.url.path.startswith("/expert-analysis"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+    return response
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -640,6 +676,122 @@ def extract_multipart_file(body: bytes, content_type: str) -> bytes:
     raise HTTPException(status_code=400, detail="No file uploaded")
 
 
+def safe_path_part(value: Any, fallback: str = "item") -> str:
+    text = str(value or "").strip().lower()
+    text = re.sub(r"[^a-zа-яё0-9._-]+", "_", text, flags=re.IGNORECASE)
+    text = text.strip("._-")
+    return text[:80] or fallback
+
+
+def get_user_storage_dir(user: dict[str, Any], image_key: str | None = None) -> Path:
+    user_id = user.get("id") or "unknown"
+    username = safe_path_part(user.get("username"), "user")
+    base_dir = GENERATED_DIR / "users" / f"{user_id}_{username}" / "expert"
+    if image_key:
+        base_dir = base_dir / safe_path_part(image_key, "image")
+    base_dir.mkdir(parents=True, exist_ok=True)
+    return base_dir
+
+
+def normalize_expert_image(raw_image: Any) -> dict[str, str]:
+    image = raw_image if isinstance(raw_image, dict) else {}
+    image_key = str(image.get("key") or image.get("url") or "").strip()
+    if not image_key:
+        raise HTTPException(status_code=400, detail="Image key is required")
+
+    return {
+        "key": image_key,
+        "url": str(image.get("url") or "").strip(),
+        "name": str(image.get("name") or "image").strip(),
+    }
+
+
+def relative_generated_path(path: Path) -> str:
+    return path.resolve().relative_to(GENERATED_DIR.resolve()).as_posix()
+
+
+def resolve_generated_path(relative_path: str) -> Path:
+    path = (GENERATED_DIR / relative_path).resolve()
+    if GENERATED_DIR.resolve() not in path.parents and path != GENERATED_DIR.resolve():
+        raise HTTPException(status_code=400, detail="Invalid file path")
+    return path
+
+
+def serialize_artifact_row(row: dict[str, Any], kind: str) -> dict[str, Any]:
+    user_name = (
+        str(row.get("full_name") or "").strip()
+        or str(row.get("username") or "").strip()
+        or "Неизвестный пользователь"
+    )
+    created_at = row.get("created_at")
+
+    return {
+        "id": row.get("id"),
+        "imageKey": row.get("image_key"),
+        "imageUrl": row.get("image_url"),
+        "imageName": row.get("image_name"),
+        "author": user_name,
+        "username": row.get("username") or "",
+        "createdAt": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
+        "downloadUrl": f"/expert/{kind}/{row.get('id')}/download",
+        **({"loadUrl": f"/expert/annotations/{row.get('id')}/content"} if kind == "annotations" else {}),
+    }
+
+
+def list_expert_artifacts(image_key: str) -> dict[str, list[dict[str, Any]]]:
+    with db_connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT a.id, a.image_key, a.image_url, a.image_name, a.created_at,
+                       u.username, u.full_name
+                FROM public.expert_image_annotations a
+                LEFT JOIN public.users u ON u.id = a.user_id
+                WHERE a.image_key = %s
+                ORDER BY a.created_at DESC, a.id DESC
+                """,
+                (image_key,),
+            )
+            annotations = [serialize_artifact_row(dict(row), "annotations") for row in cursor.fetchall()]
+
+            cursor.execute(
+                """
+                SELECT p.id, p.image_key, p.image_url, p.image_name, p.created_at,
+                       u.username, u.full_name
+                FROM public.expert_image_protocols p
+                LEFT JOIN public.users u ON u.id = p.user_id
+                WHERE p.image_key = %s
+                ORDER BY p.created_at DESC, p.id DESC
+                """,
+                (image_key,),
+            )
+            protocols = [serialize_artifact_row(dict(row), "protocols") for row in cursor.fetchall()]
+
+    return {"annotations": annotations, "protocols": protocols}
+
+
+def get_artifact_file(table: str, record_id: int) -> Path:
+    if table not in {"expert_image_annotations", "expert_image_protocols"}:
+        raise HTTPException(status_code=400, detail="Invalid artifact type")
+
+    with db_connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                f"SELECT file_path FROM public.{table} WHERE id = %s LIMIT 1",
+                (record_id,),
+            )
+            row = cursor.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    filepath = resolve_generated_path(row["file_path"])
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return filepath
+
+
 @app.post("/techcard/{control_type}")
 async def techcard_adapter(
     control_type: str,
@@ -714,14 +866,54 @@ def get_expert_backend():
 
 @app.get("/download_annotation")
 def download_annotation(_user: dict[str, Any] = Depends(require_user)):
-    filepath = EXPERT_DIR / "annotations" / "annotation.json"
-    if not filepath.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+    return RedirectResponse("/expert-analysis/", status_code=303)
 
+
+@app.post("/expert/image-history")
+async def expert_image_history(
+    payload: dict[str, Any] = Body({}),
+    _user: dict[str, Any] = Depends(require_user),
+) -> dict[str, list[dict[str, Any]]]:
+    image = normalize_expert_image(payload.get("image") if isinstance(payload, dict) else {})
+    return list_expert_artifacts(image["key"])
+
+
+@app.get("/expert/annotations/{record_id}/content")
+def expert_annotation_content(
+    record_id: int,
+    _user: dict[str, Any] = Depends(require_user),
+) -> JSONResponse:
+    filepath = get_artifact_file("expert_image_annotations", record_id)
+    try:
+        data = json.loads(filepath.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=500, detail="Annotation file is corrupted") from exc
+    return JSONResponse(data)
+
+
+@app.get("/expert/annotations/{record_id}/download")
+def expert_annotation_download(
+    record_id: int,
+    _user: dict[str, Any] = Depends(require_user),
+):
+    filepath = get_artifact_file("expert_image_annotations", record_id)
     return FileResponse(
         path=filepath,
-        filename="annotation.json",
+        filename=filepath.name,
         media_type="application/json",
+    )
+
+
+@app.get("/expert/protocols/{record_id}/download")
+def expert_protocol_download(
+    record_id: int,
+    _user: dict[str, Any] = Depends(require_user),
+):
+    filepath = get_artifact_file("expert_image_protocols", record_id)
+    return FileResponse(
+        path=filepath,
+        filename=filepath.name,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
 
 
@@ -754,17 +946,48 @@ async def find_shov(
 async def save_annotation(
     request: Request,
     _user: dict[str, Any] = Depends(require_user),
-) -> dict[str, str]:
+) -> dict[str, Any]:
     data = await request.json()
-    annotations_dir = EXPERT_DIR / "annotations"
-    annotations_dir.mkdir(parents=True, exist_ok=True)
+    image = normalize_expert_image(data.get("image") if isinstance(data, dict) else {})
+    annotation_data = dict(data)
+    annotation_data.pop("image", None)
 
-    filepath = annotations_dir / "annotation.json"
+    annotations_dir = get_user_storage_dir(_user, image["key"]) / "annotations"
+    annotations_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"annotation_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}.json"
+    filepath = annotations_dir / filename
     filepath.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
+        json.dumps(annotation_data, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    return {"status": "ok"}
+
+    with db_connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO public.expert_image_annotations (
+                    image_key, image_url, image_name, user_id, file_path
+                )
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id, image_key, image_url, image_name, created_at
+                """,
+                (
+                    image["key"],
+                    image["url"],
+                    image["name"],
+                    _user.get("id"),
+                    relative_generated_path(filepath),
+                ),
+            )
+            row = dict(cursor.fetchone())
+
+    row["username"] = _user.get("username", "")
+    row["full_name"] = _user.get("full_name", "")
+    return {
+        "status": "ok",
+        "record": serialize_artifact_row(row, "annotations"),
+        "history": list_expert_artifacts(image["key"]),
+    }
 
 
 @app.post("/save_protocol_docx")
@@ -773,6 +996,10 @@ async def save_protocol_docx(
     _user: dict[str, Any] = Depends(require_user),
 ):
     data = await request.json()
+    image = normalize_expert_image(data.get("image") if isinstance(data, dict) else {})
+    protocol_data = dict(data)
+    protocol_data.pop("image", None)
+
     backend = get_expert_backend()
     template_path = EXPERT_PY_DIR / "protocol_docx.docx"
     if not template_path.exists():
@@ -781,17 +1008,42 @@ async def save_protocol_docx(
     previous_cwd = Path.cwd()
     try:
         os.chdir(EXPERT_PY_DIR)
-        output = backend.protocol.build_protocol_doc(data, template_path)
+        output = backend.protocol.build_protocol_doc(protocol_data, template_path)
     finally:
         os.chdir(previous_cwd)
 
-    filepath = GENERATED_DIR / "protocol_generated.docx"
+    protocols_dir = get_user_storage_dir(_user, image["key"]) / "protocols"
+    protocols_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"protocol_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}.docx"
+    filepath = protocols_dir / filename
     filepath.write_bytes(output.getvalue())
+
+    with db_connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO public.expert_image_protocols (
+                    image_key, image_url, image_name, user_id, file_path, protocol_data
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    image["key"],
+                    image["url"],
+                    image["name"],
+                    _user.get("id"),
+                    relative_generated_path(filepath),
+                    Json(protocol_data),
+                ),
+            )
+            record_id = int(cursor.fetchone()["id"])
 
     return FileResponse(
         path=filepath,
-        filename="protocol.docx",
+        filename=f"protocol_{record_id}.docx",
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"X-Expert-Protocol-Id": str(record_id)},
     )
 
 

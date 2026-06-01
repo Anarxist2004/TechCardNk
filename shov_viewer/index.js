@@ -37,19 +37,60 @@ canvas.height = 500
 
 function getCanvasCoords(e) {
     const rect = canvas.getBoundingClientRect();
-    
+
+    if (rect.width === 0 || rect.height === 0) {
+        return { x: 0, y: 0 };
+    }
+
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-    
-    const canvasX = mouseX / zoomLevel;
-    const canvasY = mouseY / zoomLevel;
+
+    const canvasX = (mouseX / rect.width) * canvas.width;
+    const canvasY = (mouseY / rect.height) * canvas.height;
     
     return { x: canvasX, y: canvasY };
 }
 
-function loadImageToViewer(imageSrc, imageName = "") {
+function getStableImageKey(imageSrc) {
+    const src = String(imageSrc || "")
+    if (src.startsWith("/tech-card-images/")) {
+        return src
+    }
+
+    try {
+        const parsed = new URL(src, window.location.origin)
+        if (parsed.origin === window.location.origin && parsed.pathname.startsWith("/tech-card-images/")) {
+            return parsed.pathname
+        }
+        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+            return parsed.href
+        }
+    } catch (error) {
+        // keep local fallback below
+    }
+
+    let hash = 0
+    for (let i = 0; i < src.length; i += 1) {
+        hash = ((hash << 5) - hash + src.charCodeAt(i)) | 0
+    }
+    return `inline:${Math.abs(hash)}:${src.length}`
+}
+
+function buildExpertImageMeta(imageSrc, imageName = "", metadata = {}) {
+    const key = metadata.key || getStableImageKey(imageSrc)
+    return {
+        key,
+        url: metadata.url || imageSrc,
+        name: imageName || metadata.name || "image",
+        ...metadata,
+        key,
+    }
+}
+
+function loadImageToViewer(imageSrc, imageName = "", metadata = {}) {
     if (!imageSrc) return
 
+    const imageMeta = buildExpertImageMeta(imageSrc, imageName, metadata)
     const img = new Image()
     img.onload = function() {
         currentImage = img
@@ -86,6 +127,7 @@ function loadImageToViewer(imageSrc, imageName = "") {
         canvas.style.height = displayHeight + "px"
 
         original_image = img
+        window.currentExpertImage = imageMeta
 
         zoomLevel = 1
         brightness = 0
@@ -106,6 +148,10 @@ function loadImageToViewer(imageSrc, imageName = "") {
                 ? `Загружено изображение: ${imageName}`
                 : "Изображение загружено"
         }
+
+        window.dispatchEvent(new CustomEvent("expert-image-loaded", {
+            detail: imageMeta,
+        }))
     }
     img.onerror = function() {
         const status = document.getElementById("status")

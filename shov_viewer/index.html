@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Просмотрщик с рисованием</title>
     <link rel="stylesheet" href="/portal-static/module-nav.css">
-    <link rel="stylesheet" href="./style.css">  
+    <link rel="stylesheet" href="./style.css?v=20260601-4">  
     <script src="/portal-static/module-nav.js" defer></script>
     <!-- JS scripts -->
-    <script src="./interface.js" defer></script>
-    <script src="./tech_card_image_picker.js" defer></script>
+    <script src="./interface.js?v=20260601-4" defer></script>
+    <script src="./tech_card_image_picker.js?v=20260601-4" defer></script>
     <!-- JS figures -->
     <script src="./figures/measureRect.js" defer></script>
     <script src="./figures/line.js" defer></script>
@@ -24,14 +24,15 @@
     <!-- перемещение -->
     <script src="./drag.js" defer></script>
     <!-- JS main -->
-    <script src="./index.js" defer></script>
+    <script src="./index.js?v=20260601-4" defer></script>
     <!-- поисковик шва -->
     <script src="./shov_finder.js" defer></script>
+    <script src="./figures/comments.js?v=20260601-4" defer></script>
     <!-- сохранение аннотаций -->
-    <script src="./annotation.js" defer></script>
+    <script src="./annotation.js?v=20260601-4" defer></script>
+    <script src="./expert_history.js?v=20260601-4" defer></script>
     <script src="./defect_namer.js" defer></script>
     <!-- Комментарии -->
-    <script src="./figures/comments.js" defer></script>  
 </head>
 <div id="commentTooltip"></div>
 <body >
@@ -113,7 +114,7 @@
                 <button class="tool-btn" id="deleteBtn">Удалить</button>
                 <button class="tool-btn" id="clearBtn">Очистить</button>
                 <button class="tool-btn" id="saveBtn">Сохранить</button>
-                <input type="file" id="annotationJSONInput" style="display: none;"> <!-- инпут для загрузки JSON файла аннотации-->
+                <input type="file" id="annotationJSONInput" accept=".json,application/json" style="display: none;"> <!-- инпут для загрузки JSON файла аннотации-->
                 <button class="tool-btn" id="loadBtn">Загрузить</button>
                 
                 <button class="tool-btn" id="zoomIn">+</button>
@@ -137,6 +138,25 @@
         </div>
         <div class="annotation-right">
             <textarea id="globalAnnotation" maxlength="3000" placeholder="Комментарий..."></textarea>
+        </div>
+    </div>
+    <div class="expert-history" id="expertHistory">
+        <div class="expert-history__header">
+            <div>
+                <h2>История снимка</h2>
+                <p id="expertHistoryStatus">Откройте снимок, чтобы увидеть аннотации и протоколы.</p>
+            </div>
+            <button type="button" class="tool-btn" id="refreshExpertHistory">Обновить</button>
+        </div>
+        <div class="expert-history__columns">
+            <section class="expert-history__section">
+                <h3>Аннотации</h3>
+                <div class="expert-history__list" id="expertAnnotationHistory"></div>
+            </section>
+            <section class="expert-history__section">
+                <h3>Протоколы проверки</h3>
+                <div class="expert-history__list" id="expertProtocolHistory"></div>
+            </section>
         </div>
     </div>
     <div class="popup_add_defect">

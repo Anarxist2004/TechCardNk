@@ -170,6 +170,118 @@ body {
     color: #ffffff;
 }
 
+.expert-history {
+    padding: 14px 15px 16px;
+    background: #21262F;
+    border-top: 1px solid #3a3f4b;
+    color: #e0e0e0;
+}
+
+.expert-history__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+.expert-history__header h2 {
+    margin: 0 0 4px;
+    font-size: 18px;
+    color: #ffffff;
+}
+
+.expert-history__header p {
+    margin: 0;
+    font-size: 13px;
+    color: #b4bfd2;
+}
+
+.expert-history__columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.expert-history__section {
+    min-width: 0;
+    border: 1px solid #3a3f4b;
+    border-radius: 8px;
+    background: rgba(12, 21, 21, 0.38);
+    overflow: hidden;
+}
+
+.expert-history__section h3 {
+    margin: 0;
+    padding: 10px 12px;
+    border-bottom: 1px solid #3a3f4b;
+    font-size: 14px;
+    color: #ffffff;
+}
+
+.expert-history__list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 190px;
+    overflow: auto;
+    padding: 10px;
+}
+
+.expert-history__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px;
+    border: 1px solid rgba(140, 181, 238, 0.12);
+    border-radius: 8px;
+    background: #171d27;
+}
+
+.expert-history__meta {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.expert-history__meta strong,
+.expert-history__meta span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.expert-history__meta strong {
+    font-size: 13px;
+    color: #ffffff;
+}
+
+.expert-history__meta span {
+    font-size: 12px;
+    color: #b4bfd2;
+}
+
+.expert-history__actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 6px;
+}
+
+.expert-history__download {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+.expert-history__empty {
+    padding: 12px;
+    text-align: center;
+    font-size: 13px;
+    color: #b4bfd2;
+}
+
 .brightness{
     color: #e0e0e0;
 }
@@ -640,6 +752,10 @@ body {
 }
 
 @media (max-width: 768px) {
+    .expert-history__columns {
+        grid-template-columns: 1fr;
+    }
+
     .defects {
         flex-direction: column;
         flex-wrap: nowrap;

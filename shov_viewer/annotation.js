@@ -17,10 +17,18 @@ saveBtn.addEventListener("click", () => {
 })
 
 // Функция для создания JS файла с массивами
-async function createJSFileWithArrays() {
-    // Данные для заполнения массивов
+function getCurrentExpertImageOrAlert() {
+    if (!window.currentExpertImage || !window.currentExpertImage.key) {
+        alert("Сначала откройте снимок.")
+        return null
+    }
+
+    return window.currentExpertImage
+}
+
+function createAnnotationPayload() {
     comment = document.querySelector("#globalAnnotation").value
-    const data = {
+    return {
         ellipses: ellipses,
         ellipses3: ellipses3,
         lines_et: lines_et,
@@ -32,7 +40,22 @@ async function createJSFileWithArrays() {
         rulers: rulers,
         shov_lines: shov_lines,
         defects: defects,
+        comments: comments,
+        measure_id: measure_id,
+        comment_id: comment_id,
+        mmToPx_ratio: mmToPx_ratio,
+        len_etalon: len_etalon,
         comment: comment
+    }
+}
+
+async function createJSFileWithArrays() {
+    // Данные для заполнения массивов
+    const image = getCurrentExpertImageOrAlert()
+    if (!image) return null
+    const data = {
+        ...createAnnotationPayload(),
+        image: image
     };
 
     try {
@@ -45,11 +68,18 @@ async function createJSFileWithArrays() {
         });
 
         const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || "Не удалось сохранить аннотацию")
+        }
         console.log('Сохранено:', result);
+        window.dispatchEvent(new CustomEvent("expert-history-updated", {
+            detail: result.history,
+        }))
         return result;
         
     } catch (error) {
         console.error('Ошибка:', error);
+        alert(error.message || "Не удалось сохранить аннотацию")
     }
 }
 
@@ -72,6 +102,9 @@ annotationJSONInput.addEventListener("change", (event) => {
         const text = e.target.result;
         loadAnnotationFromLSON(text); // передача содержимого
     };
+    reader.onerror = function() {
+        alert("Не удалось прочитать файл аннотации")
+    };
 
     annotationJSONInput.value = "";
 
@@ -79,77 +112,132 @@ annotationJSONInput.addEventListener("change", (event) => {
 });
 
 // функция для работы с контентом загруженного json
+function clearAnnotationData() {
+    ellipses = []
+    ellipses3 = []
+    lines_et = []
+    lines = []
+    measureEllipses = []
+    measureEllipses3 = []
+    measureRects = []
+    rects = []
+    rulers = []
+    shov_lines = []
+    defects = []
+    comments = []
+    arr_defects_add = []
+    element_to_add = []
+    fixed_element_data = []
+    mouse_over_element = false
+    measureEllipse3_status = 1
+    points_measure3 = []
+}
+
+function cloneAnnotationValue(value) {
+    if (typeof structuredClone === "function") {
+        return structuredClone(value)
+    }
+
+    return JSON.parse(JSON.stringify(value))
+}
+
+function asAnnotationArray(value) {
+    return Array.isArray(value) ? cloneAnnotationValue(value) : []
+}
+
+function asFiniteNumber(value, fallback = 0) {
+    const number = Number(value)
+    return Number.isFinite(number) ? number : fallback
+}
+
+function getAnnotationObject(raw) {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw
+    if (!parsed || typeof parsed !== "object") {
+        throw new Error("Файл аннотации пустой или имеет неверный формат")
+    }
+
+    if (parsed.annotation && typeof parsed.annotation === "object") {
+        return parsed.annotation
+    }
+
+    if (parsed.data && typeof parsed.data === "object") {
+        return parsed.data
+    }
+
+    return parsed
+}
+
+function getMaxIdFrom(items, index) {
+    if (!Array.isArray(items)) return -1
+
+    return items.reduce((max, item) => {
+        if (!Array.isArray(item)) return max
+        const id = Number(item[index])
+        return Number.isFinite(id) ? Math.max(max, id) : max
+    }, -1)
+}
+
+function restoreAnnotationCounters(data) {
+    const maxMeasureId = Math.max(
+        getMaxIdFrom(measureEllipses, 6),
+        getMaxIdFrom(measureRects, 6),
+        getMaxIdFrom(measureEllipses3, 8),
+        getMaxIdFrom(defects, 2)
+    )
+    const savedMeasureId = asFiniteNumber(data.measure_id, 0)
+    measure_id = Math.max(savedMeasureId, maxMeasureId + 1, 0)
+
+    const maxCommentId = getMaxIdFrom(comments, 3)
+    const savedCommentId = asFiniteNumber(data.comment_id, 0)
+    comment_id = Math.max(savedCommentId, maxCommentId + 1, 0)
+
+    len_etalon = asFiniteNumber(data.len_etalon, len_etalon)
+    mmToPx_ratio = asFiniteNumber(data.mmToPx_ratio, mmToPx_ratio)
+}
+
 function loadAnnotationFromLSON(text) {
     try {
-        const data = JSON.parse(text); // парсим JSON
+        const data = getAnnotationObject(text)
+        clearAnnotationData()
 
-        // загрузили все эллипсы
-        (data["ellipses"]).forEach(element => {
-            ellipses.push(element)
-        });
-        // загрузили все эллипсы3
-        (data["ellipses3"]).forEach(element => {
-            ellipses3.push(element)
-        });
-        // загрузили эталонную линию
-        (data["lines_et"]).forEach(element => {
-            lines_et.push(element)
-        });
-        // загрузили все линии
-        (data["lines"]).forEach(element => {
-            lines.push(element)
-        });
-        // загрузили все измерительные эллипсы
-        (data["measureEllipses"]).forEach(element => {
-            measureEllipses.push(element)
-        });
-        // загрузили все измерительные эллипсы 3
-        (data["measureEllipses3"]).forEach(element => {
-            measureEllipses3.push(element)
-        });
-        // загрузили все измерительные прямоугольники
-        (data["measureRects"]).forEach(element => {
-            measureRects.push(element)
-        });
-        // загрузили все прямоугольники
-        (data["rects"]).forEach(element => {
-            rects.push(element)
-        });
-        // загрузили все линейки
-        (data["rulers"]).forEach(element => {
-            rulers.push(element)
-        });
-        // загрузили шов
-        (data["shov_lines"]).forEach(element => {
-            shov_lines.push(element)
-        });
-        // загрузили дефекты
-        (data["defects"]).forEach(defect => {
-            defects.push(defect)
-        });
-        // загрузили комментарий
-        document.querySelector("#globalAnnotation").value = data["comment"]
+        ellipses = asAnnotationArray(data.ellipses)
+        ellipses3 = asAnnotationArray(data.ellipses3)
+        lines_et = asAnnotationArray(data.lines_et)
+        lines = asAnnotationArray(data.lines)
+        measureEllipses = asAnnotationArray(data.measureEllipses)
+        measureEllipses3 = asAnnotationArray(data.measureEllipses3)
+        measureRects = asAnnotationArray(data.measureRects)
+        rects = asAnnotationArray(data.rects)
+        rulers = asAnnotationArray(data.rulers)
+        shov_lines = asAnnotationArray(data.shov_lines)
+        defects = asAnnotationArray(data.defects)
+        comments = asAnnotationArray(data.comments)
 
-        drawAllShovLines()
-        drawAllLines()
-        drawAllLinesEt()
-        drawAllRulers()
-        drawAllMeasureEllipses()
-        drawAllRects()
-        drawAllEllipses()
-        drawAllEllipses3()
-        drawAllMeasureEllipses3()
-        drawAllMeasureRects()
-        drawAllComments()
+        restoreAnnotationCounters(data)
+
+        const globalAnnotation = document.querySelector("#globalAnnotation")
+        if (globalAnnotation) {
+            globalAnnotation.value = data.comment || ""
+            localStorage.setItem("globalAnnotation", globalAnnotation.value)
+        }
+
+        redraw()
         redraw_defects()
-        
+
+        const status = document.getElementById("status")
+        if (status) {
+            status.textContent = "Аннотация загружена"
+        }
 
     } catch (error) {
-        console.error("Ошибка парсинга JSON:", error);
+        console.error("Ошибка загрузки аннотации:", error);
+        alert(error.message || "Не удалось загрузить аннотацию")
     }
 }
 
 // функция для работы с добавлением дефектов в аннотацию
+window.loadAnnotationFromText = loadAnnotationFromLSON
+
 function defectWindow() {
     if (mouse_over_element && element_to_add.length > 1) {
         fixed_element_data = element_to_add
@@ -450,6 +538,11 @@ function redraw() {
     drawAllMeasureRects()
 }
 
+function redrawAll() {
+    redraw()
+    redraw_defects()
+}
+
 
 
 // ФОРМА СОХРАНЕНИЯ АННОТАЦИИ И ПРОТОКОЛА
@@ -470,12 +563,12 @@ btn_close_popup_save.addEventListener('click', () => {
     popup_save.classList.remove("show_save_popup")
 })
 
-btn_save_annotation_json.addEventListener('click', () => {
+btn_save_annotation_json.addEventListener('click', async () => {
     // скачать документ с сервера
-    createJSFileWithArrays()
-    setTimeout(() => {
-        window.location.href = "/download_annotation";
-    }, 500)
+    const result = await createJSFileWithArrays()
+    if (result?.status === "ok") {
+        popup_save.classList.remove("show_save_popup")
+    }
 })
 
 btn_save_protocol_docx.addEventListener('click', async (event) => {
@@ -487,6 +580,9 @@ btn_save_protocol_docx.addEventListener('click', async (event) => {
     const lab_conclusion = document.querySelector("#lab_conclusion").value
     const chief_name = document.querySelector("#chief_name").value
     const inspector_name = document.querySelector("#inspector_name").value
+    const image = getCurrentExpertImageOrAlert()
+    if (!image) return
+
     data_to_json = {
         "object_name": object_name,
         "object_name_2": object_name_2,
@@ -495,7 +591,8 @@ btn_save_protocol_docx.addEventListener('click', async (event) => {
         "lab_conclusion": lab_conclusion,
         "chief_name": chief_name,
         "inspector_name": inspector_name,
-        "defects": arr_defects_add
+        "defects": arr_defects_add,
+        "image": image
     }
     // загружаем на сервер json
     try {
@@ -506,6 +603,10 @@ btn_save_protocol_docx.addEventListener('click', async (event) => {
             },
             body: JSON.stringify(data_to_json)
         });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}))
+            throw new Error(errorData.detail || "Не удалось сохранить протокол")
+        }
         
         // получаем файл
         const blob = await response.blob();
@@ -521,9 +622,12 @@ btn_save_protocol_docx.addEventListener('click', async (event) => {
 
         a.remove();
         window.URL.revokeObjectURL(url);
+        window.dispatchEvent(new CustomEvent("expert-history-refresh"))
+        popup_save.classList.remove("show_save_popup")
         
     } catch (error) {
         console.error('Ошибка:', error);
+        alert(error.message || "Не удалось сохранить протокол")
     }
 
 })

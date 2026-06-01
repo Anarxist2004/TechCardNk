@@ -106,7 +106,12 @@
                         return
                     }
 
-                    window.loadImageToViewer(image.preview, image.name || card.name)
+                    window.loadImageToViewer(image.preview, image.name || card.name, {
+                        url: image.preview,
+                        name: image.name || card.name,
+                        techCardId: card.id,
+                        source: image.source || "tech-card",
+                    })
                     setModalOpen(false)
                 })
 
