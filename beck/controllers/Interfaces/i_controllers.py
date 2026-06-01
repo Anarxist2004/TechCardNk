@@ -31,5 +31,9 @@ class IControllers(ABC, Generic[T]):
         pass
 
     @abstractmethod
+    def listSavedTechCardImages(self) -> list[dict[str, Any]]:
+        pass
+
+    @abstractmethod
     def getSavedTechCard(self, card_id: int) -> dict[str, Any] | None:
         pass

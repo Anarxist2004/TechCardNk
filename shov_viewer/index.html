@@ -9,6 +9,7 @@
     <script src="/portal-static/module-nav.js" defer></script>
     <!-- JS scripts -->
     <script src="./interface.js" defer></script>
+    <script src="./tech_card_image_picker.js" defer></script>
     <!-- JS figures -->
     <script src="./figures/measureRect.js" defer></script>
     <script src="./figures/line.js" defer></script>
@@ -39,6 +40,7 @@
             <div class="tools-back">
                 <input type="file" id="fileInput" class="file-input" accept="image/*">
                 <label for="fileInput" class="tool-btn">Загрузить изображение</label>
+                <button type="button" class="tool-btn" id="selectSavedImageBtn">Выбрать изображение</button>
                 <div class="tool-panel">
                     <label for="etalonType" class="tool-label">Тип эталона:</label>
                     <select id="etalonType" class="tool-select">
@@ -226,6 +228,19 @@
             <button id="btn_save_protocol_docx" class="popup_save_btn">Сохранить протокол (DOCX)</button>
             <button id="btn_close_popup_save" class="popup_save_btn">Закрыть</button>
         </div>  
+    </div>
+    <div class="tech-card-image-modal hidden" id="techCardImageModal" aria-hidden="true">
+        <div class="tech-card-image-modal__backdrop" data-close-tech-card-images></div>
+        <div class="tech-card-image-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="techCardImageModalTitle">
+            <div class="tech-card-image-modal__header">
+                <div>
+                    <h2 id="techCardImageModalTitle">Выбор изображения из техкарт</h2>
+                    <p id="techCardImageModalStatus">Загрузка списка...</p>
+                </div>
+                <button type="button" class="tech-card-image-modal__close" data-close-tech-card-images aria-label="Закрыть">×</button>
+            </div>
+            <div class="tech-card-image-modal__content" id="techCardImageList"></div>
+        </div>
     </div>
 </body>
 </html>

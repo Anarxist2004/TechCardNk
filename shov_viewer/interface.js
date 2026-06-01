@@ -4,6 +4,7 @@ const tools = document.querySelectorAll(".tool-btn")
 tools.forEach(tool => {
     tool.addEventListener("click", (e) => {
         if (tool.closest(".dropdown")) return;
+        if (tool.id === "selectSavedImageBtn") return;
 
         clearAllActive()
         tool.classList.add("active")

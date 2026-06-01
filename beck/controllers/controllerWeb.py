@@ -30,5 +30,8 @@ class ControllerWeb(IControllers[TechCardData]):
     def listSavedTechCards(self) -> list[dict[str, Any]]:
         return self.serv.listSavedTechCards()
 
+    def listSavedTechCardImages(self) -> list[dict[str, Any]]:
+        return self.serv.listSavedTechCardImages()
+
     def getSavedTechCard(self, card_id: int) -> dict[str, Any] | None:
         return self.serv.getSavedTechCard(card_id)

@@ -35,7 +35,7 @@ EXPERT_DIR = ROOT_DIR / "shov_viewer"
 EXPERT_PY_DIR = EXPERT_DIR / "py"
 FRONT_DIST_DIR = ROOT_DIR / "front" / "dist"
 TECHCARD_RES_DIR = BECK_DIR / "res"
-TECHCARD_DB_DSN = "host=localhost port=5432 dbname=victor_2 user=postgres password=admin"
+TECHCARD_DB_DSN = "host=localhost port=5432 dbname=victor_2 user=postgres password=root"
 AUTH_DB_DSN = os.getenv("AUTH_DB_DSN", TECHCARD_DB_DSN)
 
 for module_dir in (str(BECK_DIR), str(EXPERT_PY_DIR)):
@@ -672,6 +672,8 @@ async def techcard_adapter(
                 sync_tech_card_image_rows(saved_card_id, collect_tech_card_image_urls(prepared_data))
         elif control_type == "listSavedTechCards":
             tech_card = controller.listSavedTechCards()
+        elif control_type == "listSavedTechCardImages":
+            tech_card = controller.listSavedTechCardImages()
         elif control_type == "getSavedTechCard":
             card_id = safe_int(request_payload.get("id"), 0)
             tech_card = controller.getSavedTechCard(card_id)

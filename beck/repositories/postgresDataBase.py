@@ -40,6 +40,46 @@ class PostgresDataBase(
             return iso()
         return str(value)
 
+    @staticmethod
+    def _extract_saved_images(card_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        if not isinstance(card_data, dict):
+            return []
+
+        images: List[Dict[str, Any]] = []
+
+        def append_image(image: Any, source: str, index: int) -> None:
+            if not isinstance(image, dict):
+                return
+            preview = image.get("preview")
+            if not isinstance(preview, str) or not preview.strip():
+                return
+            images.append(
+                {
+                    "id": image.get("id") or f"{source}-{index}",
+                    "name": image.get("name") or f"Изображение {index + 1}",
+                    "preview": preview,
+                    "createdAt": image.get("createdAt") or image.get("created_at"),
+                    "fileName": image.get("fileName"),
+                    "mimeType": image.get("mimeType"),
+                    "source": source,
+                }
+            )
+
+        overview = card_data.get("overview")
+        if isinstance(overview, dict):
+            for index, image in enumerate(overview.get("weldImages") or []):
+                append_image(image, "overview", index)
+
+        uploaded_images = card_data.get("uploadedImages")
+        if isinstance(uploaded_images, dict):
+            for block_id, block_images in uploaded_images.items():
+                if not isinstance(block_images, list):
+                    continue
+                for index, image in enumerate(block_images):
+                    append_image(image, f"block-{block_id}", index)
+
+        return images
+
     def __init__(self, dsn: str):
         IRepository.__init__(self)
         self._cards: List[TechCardData] = []
@@ -500,6 +540,34 @@ class PostgresDataBase(
             return result
         except psycopg2.Error as e:
             print("list_saved_tech_cards:", e)
+            return []
+
+    def list_saved_tech_card_images(self) -> List[Dict[str, Any]]:
+        if not self.cursor:
+            return []
+        try:
+            self.cursor.execute(
+                "SELECT id, name, card_data, created_at, updated_at "
+                "FROM public.tech_cards "
+                "ORDER BY updated_at DESC, id DESC"
+            )
+            rows = self.cursor.fetchall()
+            result = []
+            for row in rows:
+                item = dict(row)
+                images = self._extract_saved_images(item.get("card_data"))
+                result.append(
+                    {
+                        "id": item.get("id"),
+                        "name": item.get("name"),
+                        "created_at": self._serialize_dt(item.get("created_at")),
+                        "updated_at": self._serialize_dt(item.get("updated_at")),
+                        "images": images,
+                    }
+                )
+            return result
+        except psycopg2.Error as e:
+            print("list_saved_tech_card_images:", e)
             return []
 
     def get_saved_tech_card(self, card_id: int) -> Optional[Dict[str, Any]]:

@@ -14,6 +14,10 @@ class IRepository(ABC, Generic[T]):
         pass
 
     @abstractmethod
+    def list_saved_tech_card_images(self) -> List[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
     def save_tech_card_snapshot(
         self,
         name: str,

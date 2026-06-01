@@ -53,6 +53,8 @@ def create_adapter(controller: IControllers,):
                 )
             elif control_type == "listSavedTechCards":
                 tech_card = controller.listSavedTechCards()
+            elif control_type == "listSavedTechCardImages":
+                tech_card = controller.listSavedTechCardImages()
             elif control_type == "getSavedTechCard":
                 card_id = safe_int(request_payload.get("id"), 0)
                 tech_card = controller.getSavedTechCard(card_id)

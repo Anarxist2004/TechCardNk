@@ -47,55 +47,87 @@ function getCanvasCoords(e) {
     return { x: canvasX, y: canvasY };
 }
 
+function loadImageToViewer(imageSrc, imageName = "") {
+    if (!imageSrc) return
+
+    const img = new Image()
+    img.onload = function() {
+        currentImage = img
+
+        const container = document.querySelector(".canvas-container")
+        const maxWidth = container?.clientWidth || viewer.clientWidth || img.width
+        const maxHeight = container?.clientHeight || viewer.clientHeight || img.height
+
+        let displayWidth = img.width
+        let displayHeight = img.height
+
+        if (displayWidth > maxWidth) {
+            displayHeight = (maxWidth / displayWidth) * displayHeight
+            displayWidth = maxWidth
+        }
+        if (displayHeight > maxHeight) {
+            displayWidth = (maxHeight / displayHeight) * displayWidth
+            displayHeight = maxHeight
+        }
+
+        canvas.width = img.width
+        canvas.height = img.height
+
+        if (canvas.width * canvas.height > 8000000) {
+            delay = 300
+        } else {
+            delay = 1
+        }
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(img, 0, 0)
+
+        canvas.style.width = displayWidth + "px"
+        canvas.style.height = displayHeight + "px"
+
+        original_image = img
+
+        zoomLevel = 1
+        brightness = 0
+        contrast = 0
+        const brightnessSlider = document.getElementById("brightnessSlider")
+        const contrastSlider = document.getElementById("contrastSlider")
+        const brightnessValue = document.getElementById("brightnessValue")
+        const contrastValue = document.getElementById("contrastValue")
+        if (brightnessSlider) brightnessSlider.value = 0
+        if (contrastSlider) contrastSlider.value = 0
+        if (brightnessValue) brightnessValue.value = 0
+        if (contrastValue) contrastValue.value = 0
+        setCanvases(0, 0)
+
+        const status = document.getElementById("status")
+        if (status) {
+            status.textContent = imageName
+                ? `Загружено изображение: ${imageName}`
+                : "Изображение загружено"
+        }
+    }
+    img.onerror = function() {
+        const status = document.getElementById("status")
+        if (status) {
+            status.textContent = "Не удалось загрузить выбранное изображение"
+        }
+    }
+    img.src = imageSrc
+}
+
+window.loadImageToViewer = loadImageToViewer
+
 fileInput.addEventListener('change', function(e) {
     const file = e.target.files[0]
     if (!file) return
     
     const reader = new FileReader()
     reader.onload = function(event) {
-        const img = new Image()
-        img.onload = function() {
-            currentImage = img
-            
-            const maxWidth = viewer.width
-            const maxHeight = viewer.width
-            
-            let displayWidth = img.width
-            let displayHeight = img.height
-            
-            if (displayWidth > maxWidth) {
-                displayHeight = (maxWidth / displayWidth) * displayHeight
-                displayWidth = maxWidth
-            }
-            if (displayHeight > maxHeight) {
-                displayWidth = (maxHeight / displayHeight) * displayWidth
-                displayHeight = maxHeight
-            }
-
-            canvas.width = img.width 
-            canvas.height = img.height 
-
-            console.log(canvas.width * canvas.height)
-            if (canvas.width * canvas.height > 8000000) {
-                console.log("delay 300")
-                delay = 300
-            } else {
-                delay = 1
-            }
-            
-            ctx.clearRect(0, 0, canvas.width, canvas.height)
-            ctx.drawImage(img, 0, 0)
-
-            canvas.style.width = displayWidth + 'px'
-            canvas.style.height = displayHeight + 'px'
-
-            original_image = img
-
-            setCanvases(0, 0)
-        }
-        img.src = event.target.result
+        loadImageToViewer(event.target.result, file.name)
     }
     reader.readAsDataURL(file)
+    e.target.value = ""
 })
 
 canvas.addEventListener("mousedown", (e) => {

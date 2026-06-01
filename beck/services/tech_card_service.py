@@ -267,6 +267,9 @@ class TechCardService(IServise):
     def listSavedTechCards(self) -> list[dict[str, Any]]:
         return self.repos.list_saved_tech_cards()
 
+    def listSavedTechCardImages(self) -> list[dict[str, Any]]:
+        return self.repos.list_saved_tech_card_images()
+
     def getSavedTechCard(self, card_id: int) -> dict[str, Any] | None:
         return self.repos.get_saved_tech_card(card_id)
 
