@@ -158,8 +158,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-print(BASE_DIR)
+PY_DIR = Path(__file__).resolve().parent
+BASE_DIR = PY_DIR.parent
 
 
 # GET /
@@ -173,7 +173,9 @@ def root():
 # GET /download_annotation
 @app.get("/download_annotation")
 def download_annotation():
-    filepath = BASE_DIR / "annotations" / "annotation.json"
+    annotations_dir = BASE_DIR / "annotations"
+    annotations_dir.mkdir(parents=True, exist_ok=True)
+    filepath = annotations_dir / "annotation.json"
     if not filepath.exists():
         raise HTTPException(404, "File not found")
 
@@ -224,10 +226,10 @@ async def save_annotation(request: Request):
 async def save_protocol_docx(request: Request):
     data = await request.json()
 
-    template_path = Path("./protocol_docx.docx")
+    template_path = PY_DIR / "protocol_docx.docx"
     output = protocol.build_protocol_doc(data, template_path)
 
-    filepath = Path("./protocol_generated.docx")
+    filepath = PY_DIR / "protocol_generated.docx"
 
     with open(filepath, "wb") as f:
         f.write(output.getvalue())

@@ -16,8 +16,8 @@
     "vite": "^4.3.9"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "node scripts/dev-techcards.mjs",
+    "build": "node scripts/build-techcards.mjs",
     "preview": "vite preview"
   }
 }

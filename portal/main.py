@@ -8,6 +8,8 @@ import os
 import base64
 import re
 import secrets
+import shutil
+import subprocess
 import sys
 import traceback
 from datetime import datetime, timedelta, timezone
@@ -33,7 +35,8 @@ TECH_CARD_IMAGE_DIR = GENERATED_DIR / "tech-card-images"
 BECK_DIR = ROOT_DIR / "beck"
 EXPERT_DIR = ROOT_DIR / "shov_viewer"
 EXPERT_PY_DIR = EXPERT_DIR / "py"
-FRONT_DIST_DIR = ROOT_DIR / "front" / "dist"
+FRONT_DIR = ROOT_DIR / "front"
+FRONT_DIST_DIR = FRONT_DIR / "dist"
 TECHCARD_RES_DIR = BECK_DIR / "res"
 TECHCARD_DB_DSN = "host=localhost port=5432 dbname=victor_2 user=postgres password=root"
 AUTH_DB_DSN = os.getenv("AUTH_DB_DSN", TECHCARD_DB_DSN)
@@ -368,6 +371,63 @@ def inject_module_nav(html: str) -> str:
             1,
         )
     return html
+
+
+FRONT_BUILD_ERROR: str | None = None
+
+
+def run_frontend_command(command: list[str]) -> None:
+    env = os.environ.copy()
+    env.setdefault("CI", "1")
+    env.setdefault("NO_COLOR", "1")
+
+    completed = subprocess.run(
+        command,
+        cwd=FRONT_DIR,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+        timeout=600,
+    )
+    if completed.returncode != 0:
+        output = "\n".join(part for part in (completed.stdout, completed.stderr) if part).strip()
+        raise RuntimeError(output or f"{' '.join(command)} failed with code {completed.returncode}")
+
+
+def ensure_frontend_build() -> bool:
+    global FRONT_BUILD_ERROR
+
+    if (FRONT_DIST_DIR / "index.html").exists():
+        FRONT_BUILD_ERROR = None
+        return True
+
+    if not (FRONT_DIR / "package.json").exists():
+        FRONT_BUILD_ERROR = f"Frontend package.json not found: {FRONT_DIR / 'package.json'}"
+        return False
+
+    npm = shutil.which("npm.cmd") or shutil.which("npm")
+    if not npm:
+        FRONT_BUILD_ERROR = "npm is not installed or is not available in PATH"
+        return False
+
+    try:
+        if not (FRONT_DIR / "node_modules").exists():
+            run_frontend_command([npm, "install"])
+        run_frontend_command([npm, "run", "build"])
+    except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+        FRONT_BUILD_ERROR = str(exc)
+        print(f"[portal frontend] Build failed: {FRONT_BUILD_ERROR}")
+        return False
+
+    if not (FRONT_DIST_DIR / "index.html").exists():
+        FRONT_BUILD_ERROR = f"Frontend build finished, but index.html was not created: {FRONT_DIST_DIR}"
+        return False
+
+    FRONT_BUILD_ERROR = None
+    return True
 
 
 @app.post("/api/auth/register")
@@ -1100,12 +1160,7 @@ async def save_protocol_docx(
     if not template_path.exists():
         raise HTTPException(status_code=404, detail="Protocol template not found")
 
-    previous_cwd = Path.cwd()
-    try:
-        os.chdir(EXPERT_PY_DIR)
-        output = backend.protocol.build_protocol_doc(protocol_data, template_path)
-    finally:
-        os.chdir(previous_cwd)
+    output = backend.protocol.build_protocol_doc(protocol_data, template_path)
 
     protocols_dir = get_user_storage_dir(_user, image["key"]) / "protocols"
     protocols_dir.mkdir(parents=True, exist_ok=True)
@@ -1147,11 +1202,35 @@ def tech_cards_redirect(_user: dict[str, Any] = Depends(require_user)):
     return RedirectResponse("/tech-cards/")
 
 
+@app.get("/tech-cards/assets/{asset_path:path}")
+def tech_cards_asset(
+    asset_path: str,
+    _user: dict[str, Any] = Depends(require_user),
+):
+    if not ensure_frontend_build():
+        raise HTTPException(
+            status_code=503,
+            detail=f"Tech cards frontend build not found. {FRONT_BUILD_ERROR or ''}".strip(),
+        )
+
+    assets_dir = (FRONT_DIST_DIR / "assets").resolve()
+    filepath = (assets_dir / asset_path).resolve()
+    if assets_dir not in filepath.parents and filepath != assets_dir:
+        raise HTTPException(status_code=400, detail="Invalid asset path")
+    if not filepath.exists() or not filepath.is_file():
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    return FileResponse(filepath)
+
+
 @app.get("/tech-cards/", response_class=HTMLResponse)
 def tech_cards_index(_user: dict[str, Any] = Depends(require_user)) -> str:
     index_path = FRONT_DIST_DIR / "index.html"
-    if not index_path.exists():
-        raise HTTPException(status_code=404, detail="Tech cards frontend build not found")
+    if not ensure_frontend_build():
+        raise HTTPException(
+            status_code=503,
+            detail=f"Tech cards frontend build not found. {FRONT_BUILD_ERROR or ''}".strip(),
+        )
     return inject_module_nav(index_path.read_text(encoding="utf-8"))
 
 
@@ -1163,6 +1242,7 @@ def expert_analysis_redirect(_user: dict[str, Any] = Depends(require_user)):
 app.mount("/portal-static", StaticFiles(directory=str(PORTAL_STATIC_DIR)), name="portal-static")
 app.mount("/tech-card-images", StaticFiles(directory=str(TECH_CARD_IMAGE_DIR)), name="tech-card-images")
 
+ensure_frontend_build()
 if FRONT_DIST_DIR.exists():
     app.mount("/tech-cards", StaticFiles(directory=str(FRONT_DIST_DIR), html=True), name="tech-cards")
     front_assets_dir = FRONT_DIST_DIR / "assets"
