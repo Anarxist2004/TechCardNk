@@ -20,6 +20,7 @@ from typing import Any
 import psycopg2
 from psycopg2.extras import Json, RealDictCursor
 from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -1076,22 +1077,39 @@ async def find_shov(
     request: Request,
     _user: dict[str, Any] = Depends(require_user),
 ) -> dict[str, Any]:
-    backend = get_expert_backend()
-    filename = f"shov_image_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}.png"
-    filepath = EXPERT_PY_DIR / filename
     file_bytes = extract_multipart_file(
         await request.body(),
         request.headers.get("content-type", ""),
     )
 
-    with filepath.open("wb") as buffer:
-        buffer.write(file_bytes)
+    temp_dir = GENERATED_DIR / "find-shov"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"shov_image_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}.png"
+    filepath = temp_dir / filename
 
-    coords = backend.get_pic2(str(filepath), 2)
+    try:
+        filepath.write_bytes(file_bytes)
+        backend = get_expert_backend()
+        coords = await run_in_threadpool(backend.get_pic2, str(filepath), 2)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"[portal expert] find_shov failed for {filename}: {exc}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Не удалось построить шов: {exc}") from exc
+    finally:
+        try:
+            if filepath.exists():
+                filepath.unlink()
+        except OSError:
+            pass
+
+    if not isinstance(coords, list) or len(coords) != 8:
+        raise HTTPException(status_code=500, detail="Модуль построения шва вернул неверный формат координат")
+
     return {
         "status": "success",
         "filename": filename,
-        "path": str(filepath),
         "coordinates": coords,
     }
 

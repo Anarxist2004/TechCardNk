@@ -146,6 +146,87 @@ def get_pic2(path_img, accuracy):
 
     return [y1_middle, y2_middle, y1_top, y2_top, y1_bottom, y2_bottom, width, height]
 
+MAX_SHOV_PROCESS_SIDE = 1800
+MAX_SHOV_PROCESS_PIXELS = 2_500_000
+
+
+def get_pic2_optimized(path_img, accuracy):
+    with open(path_img, "rb") as f:
+        img_bytes = f.read()
+
+    if not img_bytes:
+        raise ValueError("Файл изображения пустой")
+
+    img_array = np.frombuffer(img_bytes, np.uint8)
+    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+    if img is None:
+        raise ValueError("Не удалось прочитать изображение")
+
+    original_height, original_width, _ = img.shape
+    if original_width < 2 or original_height < 2:
+        raise ValueError("Изображение слишком маленькое для построения шва")
+
+    max_side_scale = MAX_SHOV_PROCESS_SIDE / max(original_width, original_height)
+    pixel_scale = (MAX_SHOV_PROCESS_PIXELS / (original_width * original_height)) ** 0.5
+    scale = min(1.0, max_side_scale, pixel_scale)
+
+    if scale < 1.0:
+        process_width = max(2, int(original_width * scale))
+        process_height = max(2, int(original_height * scale))
+        img = cv2.resize(img, (process_width, process_height), interpolation=cv2.INTER_AREA)
+    else:
+        process_height, process_width = original_height, original_width
+
+    brightness_matrix = task.get_brightness_matrix(img)
+    middle = float(np.mean(brightness_matrix))
+
+    if middle > 0.25:
+        img = cv2.add(img, -100)
+        img = cv2.convertScaleAbs(img, alpha=9, beta=0)
+    else:
+        img = cv2.convertScaleAbs(img, alpha=4, beta=0)
+
+    brightness_matrix = task.get_brightness_matrix(img)
+    middle = float(np.mean(brightness_matrix))
+    delta = np.abs(brightness_matrix - middle)
+
+    top = np.argmax(delta, axis=0).astype(np.float32)
+    top = task.simple_clean_outliers(top, accuracy)
+
+    bottom = (process_height - np.argmax(delta[::-1, :], axis=0)).astype(np.float32)
+    bottom = task.simple_clean_outliers(bottom, accuracy)
+
+    half_width_by_column = (bottom - top) / 2
+    half_width = float(np.mean(half_width_by_column))
+    center_line = task.simple_clean_outliers(top + half_width_by_column, accuracy * 2)
+
+    x = np.arange(process_width, dtype=np.float32)
+    y = np.asarray(center_line, dtype=np.float32)
+    k, b = np.polyfit(x, y, 1)
+
+    y_scale = original_height / process_height
+
+    def to_original_y(value):
+        return int(np.clip(round(value * y_scale), 0, original_height))
+
+    y1_middle = float(b)
+    y2_middle = float(k * process_width + b)
+
+    return [
+        to_original_y(y1_middle),
+        to_original_y(y2_middle),
+        to_original_y(y1_middle - half_width),
+        to_original_y(y2_middle - half_width),
+        to_original_y(y1_middle + half_width),
+        to_original_y(y2_middle + half_width),
+        original_width,
+        original_height,
+    ]
+
+
+get_pic2 = get_pic2_optimized
+
+
 #  SERVER
 app = FastAPI()
 
